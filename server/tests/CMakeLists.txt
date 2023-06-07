@@ -1,0 +1,24 @@
+cmake_minimum_required(VERSION 3.10)
+project(server_tests)
+
+set(CMAKE_CXX_STANDARD 11)
+
+find_library(WS2_32_LIB NAMES WS2_32.lib)
+
+find_package(OpenSSL REQUIRED)
+
+include_directories(${OPENSSL_INCLUDE_DIR})
+
+
+add_executable(server_tests ../src/cipher.cpp  cipher_tests.cpp)
+
+
+target_link_libraries(server_tests PRIVATE ${WS2_32_LIB})
+target_link_libraries(server_tests PRIVATE ${OPENSSL_LIBRARIES})
+
+
+include(CTest)
+enable_testing()
+
+include(CPack)
+add_test(NAME server_tests COMMAND server_tests)

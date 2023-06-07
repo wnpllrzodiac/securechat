@@ -22,3 +22,5 @@ enable_testing()
 
 include(CPack)
 add_test(NAME client_tests COMMAND client_tests)
+
+configure_file(../../key.txt ${CMAKE_CURRENT_BINARY_DIR}/Debug/key.txt COPYONLY)

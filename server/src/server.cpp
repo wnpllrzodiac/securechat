@@ -8,6 +8,11 @@
 
 using namespace std;
 
+/**
+ * @brief Function to receive data from the client, decrypt it using AES-128, and display it.
+ * 
+ * @param {SOCKET} client The client socket to receive data from.
+ */
 void serverReceive(SOCKET client) {
     char buffer[1024] = { 0 };
     while (true) {
@@ -25,6 +30,11 @@ void serverReceive(SOCKET client) {
     }
 }
 
+/**
+ * @brief Function to get input from the server, encrypt it using AES-128, and send it to the client.
+ * 
+ * @param {SOCKET} client The client socket to send data to.
+ */
 void serverSend(SOCKET client) {
     char buffer[1024] = { 0 };
     while (true) {
@@ -41,6 +51,11 @@ void serverSend(SOCKET client) {
     }
 }
 
+/**
+ * @brief Main function to create a server, accept client connections, and start the chat application.
+ * 
+ * @return {int} Exit status of the application.
+ */
 int main() {
     WSADATA WSAData;
     SOCKET server, client;

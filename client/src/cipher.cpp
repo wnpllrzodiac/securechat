@@ -4,37 +4,42 @@
 #include <cstring>
 #include <fstream>
 
-
+/**
+ * @brief Function for getting the key
+ * The function opens the file key.txt and gets the key
+ * @return {const unsigned*} defaultKey 16 bit key 
+ */
 const unsigned char* getkey() {
-    std::ifstream file("key.txt"); // открываем файл для чтения
-    std::string line; // переменная для хранения строки
+    std::ifstream file("key.txt");
+    std::string line; 
 
-    if (file.is_open()) { // проверяем, удалось ли открыть файл
-        if (std::getline(file, line)) { // считываем первую строку из файла
-            
-            // Преобразование строки в массив типа const unsigned char[]
+    if (file.is_open()) { 
+        if (std::getline(file, line)) { 
             static const unsigned char key[] = { line.c_str()[0], line.c_str()[1], line.c_str()[2], '\0' };
 
             return key;
         } else {
-            std::cout << "1" << std::endl;
+            std::cout << "The file is empty" << std::endl;
         }
-        file.close(); // закрываем файл
+        file.close();
     } else {
-        std::cout << "2" << std::endl;
+        std::cout << "Сould not open the file" << std::endl;
     }
 
-    // Если чтение файла не удалось, можно вернуть значение по умолчанию
     static const unsigned char defaultKey[] = { '\0' };
     return defaultKey;
 }
 
+/**
+ * @brief Encryption function
+ * Encrypts text using aes-128
+ * @param {char*} plaintext 
+ * @param {size_t} length 
+ */
 void encrypt_AES(char* plaintext, size_t length)
 {
-    // Ключ для шифрования
     // const unsigned char key[] = "0123456789abcdef";
     const unsigned char *key = getkey();
-
     AES_KEY aesKey;
     AES_set_encrypt_key(key, 128, &aesKey); 
 
@@ -47,9 +52,14 @@ void encrypt_AES(char* plaintext, size_t length)
     }
 }
 
+/**
+ * @brief Decryption function
+ * Decrypts text using aes-128
+ * @param {char*} plaintext 
+ * @param {size_t} length
+ */
 void decrypt_AES(char* ciphertext, size_t length)
 {
-    // Ключ для дешифрования
     // const unsigned char key[] = "0123456789abcdef";
     const unsigned char *key = getkey();
 
@@ -65,20 +75,4 @@ void decrypt_AES(char* ciphertext, size_t length)
     }
 }
 
-// // Пример использования функций encrypt_AES и decrypt_AES
-// int main()
-// {
-//     char buffer[1024] = "Thiss message se Hello my name";
 
-//     std::cout << "Оригинальный текст: " << buffer << std::endl;
-
-//     // Шифрование
-//     encrypt_AES(buffer);
-//     std::cout << "Зашифрованный текст: " << buffer << std::endl;
-
-//     // Дешифрование
-//     decrypt_AES(buffer);
-//     std::cout << "Расшифрованный текст: " << buffer << std::endl;
-
-//     return 0;
-// }

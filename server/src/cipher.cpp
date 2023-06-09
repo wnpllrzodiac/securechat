@@ -33,8 +33,8 @@ const unsigned char* getkey() {
 /**
  * @brief Encryption function
  * Encrypts text using aes-128
- * @param {char*} plaintext 
- * @param {size_t} length 
+ * @param {char*} plaintext text for encryption
+ * @param {size_t} length text length
  */
 void encrypt_AES(char* plaintext, size_t length)
 {
@@ -55,8 +55,8 @@ void encrypt_AES(char* plaintext, size_t length)
 /**
  * @brief Decryption function
  * Decrypts text using aes-128
- * @param {char*} plaintext 
- * @param {size_t} length
+ * @param {char*} plaintext text for decryption
+ * @param {size_t} length text length
  */
 void decrypt_AES(char* ciphertext, size_t length)
 {

@@ -10,7 +10,6 @@ using namespace std;
 
 /**
  * @brief Function to receive data from the server and decrypt it using AES-128.
- * 
  * @param {SOCKEt} server The server socket to receive data from.
  */
 void clientReceive(SOCKET server) 
@@ -36,7 +35,6 @@ void clientReceive(SOCKET server)
 
 /**
  * @brief Function to send data to the server after encrypting it using AES-128.
- * 
  * @param {SOCKET} server The server socket to send data to.
  */
 void clientSend(SOCKET server) 
@@ -61,7 +59,6 @@ void clientSend(SOCKET server)
 
 /**
  * @brief Main function to establish a connection with the server and start the client chat application.
- * 
  * @return {int} Exit status of the application.
  */
 int main() 

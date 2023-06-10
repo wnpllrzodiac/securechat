@@ -15,7 +15,9 @@ const unsigned char* getkey() {
 
     if (file.is_open()) { 
         if (std::getline(file, line)) { 
-            static const unsigned char key[] = { line.c_str()[0], line.c_str()[1], line.c_str()[2], '\0' };
+            static const unsigned char defaultKey[16] = { 0 };
+            unsigned char key[16];
+            strncpy(reinterpret_cast<char*>(key), line.c_str(), sizeof(key));
 
             return key;
         } else {
@@ -26,7 +28,7 @@ const unsigned char* getkey() {
         std::cout << "Сould not open the file" << std::endl;
     }
 
-    static const unsigned char defaultKey[] = { '\0' };
+    static const unsigned char defaultKey[16] = { 0 };
     return defaultKey;
 }
 

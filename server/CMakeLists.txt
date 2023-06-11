@@ -21,6 +21,6 @@ add_subdirectory(tests)
 include(CTest)
 enable_testing()
 
-include(CPack)
+
 
 configure_file(../key.txt ${CMAKE_CURRENT_BINARY_DIR}/Debug/key.txt COPYONLY)

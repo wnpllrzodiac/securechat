@@ -7,30 +7,30 @@
 /**
  * @brief Function for getting the key
  * The function opens the file key.txt and gets the key
- * @return {static const unsigned*} defaultKey 16 bit key
+ * @return {const unsigned char *} key 16 bit key
  */
 const unsigned char *getkey() {
   std::ifstream file("key.txt");
   std::string line;
+  static const unsigned char defaultKey[16] = {0};
 
-  if (file.is_open()) {
-    if (std::getline(file, line)) {
-      static const unsigned char defaultKey[16] = {0};
-      unsigned char key[16];
-      strncpy(reinterpret_cast<char *>(key), line.c_str(), sizeof(key));
-
-      return key;
-    } else {
-      std::cout << "The file is empty" << std::endl;
-    }
-    file.close();
-  } else {
-    std::cout << "Сould not open the file" << std::endl;
+  if (!file.is_open()) {
+    std::cout << "Could not open the file" << std::endl;
+    return defaultKey;
   }
 
-  static const unsigned char defaultKey[16] = {0};
+  if (std::getline(file, line)) {
+    static unsigned char key[16];
+    strncpy(reinterpret_cast<char *>(key), line.c_str(), sizeof(key));
+    file.close();
+    return key;
+  }
+
+  std::cout << "The file is empty" << std::endl;
+  file.close();
   return defaultKey;
 }
+
 
 /**
  * @brief Encryption function

@@ -11,17 +11,29 @@
 using namespace std;
 
 struct ClientInfo {
+    int         id;
     std::string username;
-    SOCKET client;
+    SOCKET      client;
 };
 
 std::vector<ClientInfo> userList;
 
+enum MESSAGE_TYPE {
+    MESSAGE_TYPE_LOGIN = 10,
+    MESSAGE_TYPE_USERNAME = 20,
+    MESSAGE_TYPE_MESSAGE = 30,
+    MESSAGE_TYPE_EXIT = 40,
+};
+
 /*
-1 byte: message type:    1-username, 2-message, 3-exit
+1 byte: message type
+4 bytes: from
+4 bytes: to
 4 bytes: message length: little endian
 n bytes: message
 */
+
+void serverSendLoginMessage(SOCKET client, int uid);
 
 /**
  * @brief Function to receive data from the client, decrypt it using AES-128,
@@ -33,12 +45,12 @@ void serverReceive(SOCKET client) {
     char buffer[MAX_BUFFER_SIZE] = {0};
     int offset = 0;
     int readed = -1;
-    int curr_msg_len = -1;
+    int curr_payload_len = -1;
 
     while (true) {
         int toread = MAX_BUFFER_SIZE - offset;
-        if (curr_msg_len > 0) {
-            toread = curr_msg_len - (offset - 1 - 5);
+        if (curr_payload_len > 0) {
+            toread = curr_payload_len - (offset - 13);
         }
 
         if ((readed = recv(client, buffer + offset, toread, 0)) == SOCKET_ERROR) {
@@ -46,33 +58,40 @@ void serverReceive(SOCKET client) {
             return;
         }
 
-        if (readed < 5) {
+        if (readed < 13) {
             offset += readed;
             continue;
         }
 
         int msg_type = buffer[0];
-        int msg_len = *(int *)(buffer + 1);
-        std::cout << "msg type: " << msg_type << ", msg_len: " << msg_len << std::endl;
+        int msg_from = *(int*)(buffer + 1);
+        int msg_to = *(int*)(buffer + 5);
+        int payload_len = *(int*)(buffer + 9);
+        std::cout << "msg type: " << msg_type << ", msg_len: " << payload_len << ", from: " << msg_from << ", to: " << msg_to << std::endl;
 
         offset += readed;
-        if (offset < 1 + 4 + msg_len) {
+        if (offset < 13 + payload_len) {
             // not enough data
-            curr_msg_len = msg_len;
+            curr_payload_len = payload_len;
             continue;
         }
 
+        int uid = -1;
         switch (msg_type) {
-        case 1:
-            decrypt_AES(buffer + 5, offset - 5);
-            userList.push_back({std::string(buffer + 5), client});
-            std::cout << "Client " << buffer + 5 << " added to list" << std::endl;
+        case MESSAGE_TYPE_USERNAME:
+            decrypt_AES(buffer + 13, offset - 13);
+            uid = (int)userList.size();
+            userList.push_back({ uid, std::string(buffer + 13), client});
+            std::cout << "Client #" << uid << ": " <<  buffer + 13 << " added to list" << std::endl;
+
+            serverSendLoginMessage(client, uid);
+
             break;
-        case 2:
-            decrypt_AES(buffer + 5, offset - 5);
-            cout << "Client msg: " << buffer + 5;
+        case MESSAGE_TYPE_MESSAGE:
+            decrypt_AES(buffer + 13, offset - 13);
+            cout << "Client msg: " << buffer + 13;
             break;
-        case 3:
+        case MESSAGE_TYPE_EXIT:
             cout << "Client Disconnected." << endl;
             break;
         default:
@@ -89,20 +108,23 @@ void serverReceive(SOCKET client) {
  * send it to the client.
  * @param {SOCKET} client The client socket to send data to.
  */
-void serverSend(SOCKET client) {
-  char buffer[1024] = {0};
-  while (true) {
-    fgets(buffer, 1024, stdin);
-    encrypt_AES(buffer, strlen(buffer));
-    if (send(client, buffer, sizeof(buffer), 0) == SOCKET_ERROR) {
-      cout << "send failed with error " << WSAGetLastError() << endl;
-      return;
+void serverSendLoginMessage(SOCKET client, int uid) {
+    char buffer[1024] = {0};
+    buffer[0] = MESSAGE_TYPE_LOGIN;
+    memset(buffer + 1, 0, 4);
+    memset(buffer + 5, 0, 4);
+    int size = 0;
+    memcpy(buffer + 9, &size, 4);
+
+    char tmp[64] = { 0 };
+    memcpy(tmp, &uid, 4);
+    encrypt_AES(tmp, 4);
+    
+    memcpy(buffer + 13, tmp, strlen(tmp));
+
+    if (send(client, buffer, 13 + strlen(tmp), 0) == SOCKET_ERROR) {
+        cout << "send failed with error " << WSAGetLastError() << endl;
     }
-    if (strcmp(buffer, "exit\n") == 0) {
-      cout << "Thank you for using the application" << endl;
-      break;
-    }
-  }
 }
 
 /**
@@ -139,23 +161,14 @@ int main() {
   cout << "Listening for incoming connections...." << endl;
 
   int clientAddrSize = sizeof(clientAddr);
-  if ((client = accept(server, (SOCKADDR *)&clientAddr, &clientAddrSize)) !=
-      INVALID_SOCKET) {
+  while ((client = accept(server, (SOCKADDR *)&clientAddr, &clientAddrSize)) != INVALID_SOCKET) {
     cout << "Client connected!" << endl;
     cout << "Now you can use our live chat application. "
          << "Enter \"exit\" to disconnect" << endl;
 
     thread t1(serverReceive, client);
-    thread t2(serverSend, client);
-
-    t1.join();
-    t2.join();
-
-    closesocket(client);
-    if (closesocket(server) == SOCKET_ERROR) {
-      cout << "Close socket failed with error: " << WSAGetLastError() << endl;
-      return -1;
-    }
-    WSACleanup();
+    t1.detach();
   }
+
+  WSACleanup();
 }

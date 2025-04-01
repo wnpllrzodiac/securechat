@@ -11,5 +11,5 @@ SecureChat allows users to communicate through a chat with guaranteed data prote
 # Exchanging secret messages ✉️
 
 # Build
-`cmake -B build__ -S . -DOPENSSL_ROOT_DIR=D:\download\code\sdk\OpenSSL-Win64 --fresh`
-`cmake --build build__ --config Release`
+1. `cmake -B build__ -S . -DOPENSSL_ROOT_DIR=D:\download\code\sdk\OpenSSL-Win64 --fresh`
+2. `cmake --build build__ --config Release`

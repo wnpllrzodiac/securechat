@@ -3,8 +3,6 @@ project(client)
 
 set(CMAKE_CXX_STANDARD 11)
 
-find_library(WS2_32_LIB NAMES WS2_32.lib)
-
 find_package(OpenSSL REQUIRED)
 
 include_directories(${OPENSSL_INCLUDE_DIR})
@@ -13,7 +11,7 @@ include_directories(${OPENSSL_INCLUDE_DIR})
 add_executable(client src/client.cpp src/cipher.cpp)
 
 
-target_link_libraries(client PRIVATE ${WS2_32_LIB})
+target_link_libraries(client PRIVATE wsock32 ws2_32)
 target_link_libraries(client PRIVATE ${OPENSSL_LIBRARIES})
 
 add_subdirectory(tests)

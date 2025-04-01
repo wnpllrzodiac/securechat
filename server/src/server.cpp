@@ -34,6 +34,7 @@ n bytes: message
 */
 
 void serverSendLoginMessage(SOCKET client, int uid);
+void serverForwardMessage(int from, int to, char* encrypted_message, int len);
 
 /**
  * @brief Function to receive data from the client, decrypt it using AES-128,
@@ -88,8 +89,10 @@ void serverReceive(SOCKET client) {
 
             break;
         case MESSAGE_TYPE_MESSAGE:
-            decrypt_AES(buffer + 13, offset - 13);
-            cout << "Client msg: " << buffer + 13;
+            cout << "Client msg: " << buffer + 13 << ", to: " << msg_to;
+
+            serverForwardMessage(msg_from, msg_to, buffer + 13, offset - 13);
+
             break;
         case MESSAGE_TYPE_EXIT:
             cout << "Client Disconnected." << endl;
@@ -124,6 +127,26 @@ void serverSendLoginMessage(SOCKET client, int uid) {
 
     if (send(client, buffer, 13 + strlen(tmp), 0) == SOCKET_ERROR) {
         cout << "send failed with error " << WSAGetLastError() << endl;
+    }
+}
+
+void serverForwardMessage(int from, int to, char* encrypted_message, int len) {
+    char buffer[1024] = { 0 };
+    buffer[0] = MESSAGE_TYPE_MESSAGE;
+    memcpy(buffer + 1, &from, 4);
+    memcpy(buffer + 5, &to, 4);
+    memcpy(buffer + 9, &len, 4);
+
+    memcpy(buffer + 13, encrypted_message, len);
+
+    for (auto cli : userList) {
+        if (cli.id == to) {
+            if (send(cli.client, buffer, 13 + len, 0) == SOCKET_ERROR) {
+				cout << "send failed with error " << WSAGetLastError() << endl;
+			}
+            cout << "message forwarded to: " << to;
+			break;
+		}
     }
 }
 

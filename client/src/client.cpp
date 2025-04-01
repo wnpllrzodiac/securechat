@@ -37,6 +37,8 @@ string readme(string username) {
     return s;
 }
 
+int g_uid = -1;
+
 /**
  * @brief Function to receive data from the server and decrypt it using AES-128.
  * @param {SOCKEt} server The server socket to receive data from.
@@ -83,6 +85,7 @@ void clientReceive(SOCKET server) {
             int uid;
             memcpy(&uid, buffer + 13, 4);
             cout << "Your user id is: " << uid << endl;
+            g_uid = uid;
             break;
         case MESSAGE_TYPE_MESSAGE:
             decrypt_AES(buffer + 13, offset - 13);
@@ -125,8 +128,19 @@ void clientSend(SOCKET server) {
         return;
     }
 
+    int to_uid = -1;
     while (true) {
         fgets(msg, 4096, stdin);
+        if (strstr(msg, "connect") == msg) {
+            sscanf(msg, "connect %d", &to_uid);
+            cout << "set to_user to: " << to_uid << endl;
+            continue;
+        }
+
+        if (to_uid == -1) {
+			cout << "Please connect to a user first" << endl;
+			continue;
+		}
 
         encrypt_AES(msg, strlen(msg));
 
@@ -134,6 +148,8 @@ void clientSend(SOCKET server) {
         buffer[0] = MESSAGE_TYPE_MESSAGE;
         // fix buffer[1] to buffer[4] with the length of the username
         int size = strlen(msg);
+        memcpy(buffer + 1, &g_uid, 4); // from user id
+        memcpy(buffer + 5, &to_uid, 4); // to user id
         memcpy(buffer + 9, &size, 4);
         memcpy(buffer + 13, msg, strlen(msg));
         int msg_len = 13 + strlen(msg);

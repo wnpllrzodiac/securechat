@@ -5,7 +5,6 @@
 #include <cstring>
 #include <iostream>
 #include <thread>
-#include <winsock2.h>
 
 using namespace std;
 
@@ -38,13 +37,13 @@ string readme(string username) {
     return s;
 }
 
-int g_uid = -1;
-
 /**
  * @brief Function to receive data from the server and decrypt it using AES-128.
  * @param {SOCKEt} server The server socket to receive data from.
  */
-void clientReceive(SOCKET server) {
+void clientReceive(MainWnd* ins) {
+    SOCKET server = ins->getServerSocket();
+
     const int MAX_BUFFER_SIZE = 4096;
     char buffer[MAX_BUFFER_SIZE] = { 0 };
     int offset = 0;
@@ -86,7 +85,7 @@ void clientReceive(SOCKET server) {
             int uid;
             memcpy(&uid, buffer + 13, 4);
             cout << "Your user id is: " << uid << endl;
-            g_uid = uid;
+            ins->setUid(uid);
             break;
         case MESSAGE_TYPE_MESSAGE:
             decrypt_AES(buffer + 13, offset - 13);
@@ -105,15 +104,16 @@ void clientReceive(SOCKET server) {
  * @brief Function to send data to the server after encrypting it using AES-128.
  * @param {SOCKET} server The server socket to send data to.
  */
-void clientSend(SOCKET server) {
+void clientSend(MainWnd * ins) {
+    SOCKET server = ins->getServerSocket();
+
     char buffer[4096] = { 0 };
     char username[64] = { 0 };
     char msg[4096] = { 0 };
-    cout << "Enter your username: ";
-    fgets(username, 64, stdin);
 
-    cout << readme(username);
+    cout << readme(ins->getNickName().toStdString().c_str());
 
+    strcpy(username, ins->getNickName().toStdString().c_str());
     encrypt_AES(username, strlen(username));
 
     buffer[0] = MESSAGE_TYPE_USERNAME;
@@ -128,6 +128,8 @@ void clientSend(SOCKET server) {
         cout << "send failed with error: " << WSAGetLastError() << endl;
         return;
     }
+
+    return;
 
     int to_uid = -1;
     while (true) {
@@ -149,7 +151,8 @@ void clientSend(SOCKET server) {
         buffer[0] = MESSAGE_TYPE_MESSAGE;
         // fix buffer[1] to buffer[4] with the length of the username
         int size = strlen(msg);
-        memcpy(buffer + 1, &g_uid, 4); // from user id
+        int uid = ins->getUid();
+        memcpy(buffer + 1, &uid, 4); // from user id
         memcpy(buffer + 5, &to_uid, 4); // to user id
         memcpy(buffer + 9, &size, 4);
         memcpy(buffer + 13, msg, strlen(msg));
@@ -173,42 +176,99 @@ MainWnd::MainWnd(QWidget* parent)
 
 	setWindowTitle("Oral Camera");
 
+    QScrollArea* scrollArea = ui.scrollAreaHistory;
+    m_logTextEdit = new QTextEdit();
+    m_logTextEdit->setReadOnly(true);
+
+    m_logTextEdit->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    m_logTextEdit->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    scrollArea->setWidget(m_logTextEdit);
+    scrollArea->setWidgetResizable(true);
+
     WSADATA WSAData;
     WSAStartup(MAKEWORD(2, 2), &WSAData);
+
+    QObject::connect(ui.pushButtonConnect, &QPushButton::clicked, this, &MainWnd::connectToServer);
+    QObject::connect(ui.pushButtonSend, &QPushButton::clicked, this, &MainWnd::sendData);
 }
 
 MainWnd::~MainWnd()
 {
+    closesocket(m_server);
+
     WSACleanup();
 }
 
-int MainWnd::func()
+void MainWnd::sendData()
 {
-    SOCKET server;
+    QString strMsg = ui.textEditMessage->toPlainText();
+    if (strMsg.isEmpty()) {
+		return;
+	}
+
+	ui.textEditMessage->clear();
+
+	m_logTextEdit->append("You sent: " + strMsg);
+
+    char msg[256] = { 0 };
+    strcpy(msg, strMsg.toStdString().c_str());
+    encrypt_AES(msg, strlen(msg));
+
+    char buffer[4096] = { 0 };
+
+    memset(buffer, 0, 4096);
+    buffer[0] = MESSAGE_TYPE_MESSAGE;
+    // fix buffer[1] to buffer[4] with the length of the username
+    int size = strlen(msg);
+    memcpy(buffer + 1, &m_uid, 4); // from user id
+    memcpy(buffer + 5, &m_to_uid, 4); // to user id
+    memcpy(buffer + 9, &size, 4);
+    memcpy(buffer + 13, msg, strlen(msg));
+    int msg_len = 13 + strlen(msg);
+
+    if (send(m_server, buffer, msg_len, 0) == SOCKET_ERROR) {
+        cout << "send failed with error: " << WSAGetLastError() << endl;
+        return;
+    }
+
+}
+
+int MainWnd::connectToServer()
+{
+    m_nickname = ui.lineEditNickName->text();
+    
     SOCKADDR_IN addr;
 
-    if ((server = ::socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
+    if ((m_server = ::socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
         cout << "Socket creation failed with error: " << WSAGetLastError() << endl;
         return -1;
     }
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    
+    std::string ipaddr = ui.lineEditIpAddr->text().toStdString();
+    int port = ui.lineEditPort->text().toInt();
+
+    addr.sin_addr.s_addr = inet_addr(ipaddr.c_str());
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(6666);
-    if (::connect(server, (SOCKADDR*)&addr, sizeof(addr)) == SOCKET_ERROR) {
+    addr.sin_port = htons(port);
+
+    if (::connect(m_server, (SOCKADDR*)&addr, sizeof(addr)) == SOCKET_ERROR) {
         cout << "Server connection failed with error: " << WSAGetLastError()
             << endl;
         return -1;
     }
 
+    m_logTextEdit->append("Connected to server!");
+
     cout << "Connected to server!" << endl;
     cout << "Now you can use our live chat application. "
         << " Enter \"exit\" to disconnect" << endl;
 
-    std::thread t1(clientReceive, server);
-    std::thread t2(clientSend, server);
+    std::thread t1(clientReceive, this);
+    std::thread t2(clientSend, this);
 
-    t1.join();
-    t2.join();
+    t1.detach();
+    t2.detach();
 
-    closesocket(server);
+    return 0;
 }

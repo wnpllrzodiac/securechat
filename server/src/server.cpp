@@ -89,9 +89,17 @@ void serverReceive(SOCKET client) {
 
             break;
         case MESSAGE_TYPE_MESSAGE:
-            cout << "Client msg: " << buffer + 13 << ", to: " << msg_to;
+            cout << "Client msg(encrypted): " << buffer + 13 << ", to: " << msg_to << std::endl;
 
-            serverForwardMessage(msg_from, msg_to, buffer + 13, offset - 13);
+            if (msg_to == -1) {
+                // broadcast
+                decrypt_AES(buffer + 13, offset - 13);
+                std::cout << "broadcast msg: " << buffer + 13 << std::endl;
+            }
+            else {
+                // p2p
+                serverForwardMessage(msg_from, msg_to, buffer + 13, offset - 13);
+            }
 
             break;
         case MESSAGE_TYPE_EXIT:

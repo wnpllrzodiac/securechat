@@ -71,13 +71,52 @@
      <rect>
       <x>40</x>
       <y>30</y>
-      <width>201</width>
-      <height>81</height>
+      <width>351</width>
+      <height>101</height>
      </rect>
     </property>
     <property name="title">
      <string>Server</string>
     </property>
+    <widget class="QPushButton" name="pushButtonConnect">
+     <property name="geometry">
+      <rect>
+       <x>250</x>
+       <y>40</y>
+       <width>61</width>
+       <height>41</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Connect</string>
+     </property>
+    </widget>
+    <widget class="QLineEdit" name="lineEditNickName">
+     <property name="geometry">
+      <rect>
+       <x>110</x>
+       <y>60</y>
+       <width>113</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Jackie</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_4">
+     <property name="geometry">
+      <rect>
+       <x>28</x>
+       <y>60</y>
+       <width>71</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>NickName:</string>
+     </property>
+    </widget>
    </widget>
    <widget class="QListWidget" name="listWidgetClients">
     <property name="geometry">
@@ -105,8 +144,8 @@
    <widget class="QPushButton" name="pushButtonSend">
     <property name="geometry">
      <rect>
-      <x>300</x>
-      <y>140</y>
+      <x>320</x>
+      <y>150</y>
       <width>61</width>
       <height>41</height>
      </rect>
@@ -118,10 +157,10 @@
    <widget class="QTextEdit" name="textEditMessage">
     <property name="geometry">
      <rect>
-      <x>40</x>
-      <y>120</y>
+      <x>50</x>
+      <y>140</y>
       <width>251</width>
-      <height>81</height>
+      <height>61</height>
      </rect>
     </property>
     <property name="html">

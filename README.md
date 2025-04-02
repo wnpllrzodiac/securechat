@@ -13,3 +13,6 @@ SecureChat allows users to communicate through a chat with guaranteed data prote
 # Build
 1. `cmake -B build__ -S . -DOPENSSL_ROOT_DIR=c:\OpenSSL-Win64 -DQT_DIR=C:\Qt\6.8.0\win64 --fresh`
 2. `cmake --build build__ --config Release`
+
+# log
+https://github.com/badaix/aixlog

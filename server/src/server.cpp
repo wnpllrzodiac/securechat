@@ -6,7 +6,7 @@
 #include <thread>
 #include <vector>
 #include <winsock2.h>
-
+#include "aixlog.hpp"
 
 using namespace std;
 
@@ -55,7 +55,7 @@ void serverReceive(SOCKET client) {
         }
 
         if ((readed = recv(client, buffer + offset, toread, 0)) == SOCKET_ERROR) {
-            cout << "recv function failed with error " << WSAGetLastError() << endl;
+            LOG(INFO) << "recv function failed with error " << WSAGetLastError() << endl;
             return;
         }
 
@@ -68,7 +68,7 @@ void serverReceive(SOCKET client) {
         int msg_from = *(int*)(buffer + 1);
         int msg_to = *(int*)(buffer + 5);
         int payload_len = *(int*)(buffer + 9);
-        std::cout << "msg type: " << msg_type << ", msg_len: " << payload_len << ", from: " << msg_from << ", to: " << msg_to << std::endl;
+        LOG(INFO) << "msg type: " << msg_type << ", msg_len: " << payload_len << ", from: " << msg_from << ", to: " << msg_to << std::endl;
 
         offset += readed;
         if (offset < 13 + payload_len) {
@@ -83,18 +83,18 @@ void serverReceive(SOCKET client) {
             decrypt_AES(buffer + 13, offset - 13);
             uid = (int)userList.size();
             userList.push_back({ uid, std::string(buffer + 13), client});
-            std::cout << "Client #" << uid << ": " <<  buffer + 13 << " added to list" << std::endl;
+            LOG(INFO) << "Client #" << uid << ": " <<  buffer + 13 << " added to list\n";
 
             serverSendLoginMessage(client, uid);
 
             break;
         case MESSAGE_TYPE_MESSAGE:
-            cout << "Client msg(encrypted): " << buffer + 13 << ", to: " << msg_to << std::endl;
+            LOG(INFO) << "Client msg(encrypted): " << buffer + 13 << ", to: " << msg_to << "\n";
 
             if (msg_to == -1) {
                 // broadcast
                 decrypt_AES(buffer + 13, offset - 13);
-                std::cout << "broadcast msg: " << buffer + 13 << std::endl;
+                LOG(INFO) << "broadcast msg: " << buffer + 13 << "\n";
             }
             else {
                 // p2p
@@ -103,7 +103,7 @@ void serverReceive(SOCKET client) {
 
             break;
         case MESSAGE_TYPE_EXIT:
-            cout << "Client Disconnected." << endl;
+            LOG(INFO) << "Client Disconnected.";
             break;
         default:
             break;
@@ -134,7 +134,7 @@ void serverSendLoginMessage(SOCKET client, int uid) {
     memcpy(buffer + 13, tmp, strlen(tmp));
 
     if (send(client, buffer, 13 + strlen(tmp), 0) == SOCKET_ERROR) {
-        cout << "send failed with error " << WSAGetLastError() << endl;
+        LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;
     }
 }
 
@@ -150,9 +150,11 @@ void serverForwardMessage(int from, int to, char* encrypted_message, int len) {
     for (auto cli : userList) {
         if (cli.id == to) {
             if (send(cli.client, buffer, 13 + len, 0) == SOCKET_ERROR) {
-				cout << "send failed with error " << WSAGetLastError() << endl;
+                LOG(ERROR) << "send failed with error " << WSAGetLastError() << endl;
 			}
-            cout << "message forwarded to: " << to;
+
+            LOG(INFO) << "message forwarded to: " << to;
+
 			break;
 		}
     }
@@ -164,38 +166,48 @@ void serverForwardMessage(int from, int to, char* encrypted_message, int len) {
  * @return {int} Exit status of the application.
  */
 int main() {
+  auto sink_cout = make_shared<AixLog::SinkCout>(AixLog::Severity::info);
+  auto sink_file = make_shared<AixLog::SinkFile>(AixLog::Severity::info, "server.log");
+  AixLog::Log::init({ sink_cout, sink_file });
+  LOG(INFO) << "Hello, World!\n";
+
   WSADATA WSAData;
   SOCKET server, client;
   SOCKADDR_IN serverAddr, clientAddr;
   if (WSAStartup(MAKEWORD(2, 0), &WSAData) != 0) {
     cout << "Error WSAStartup: " << WSAGetLastError() << endl;
+    LOG(ERROR) << "Error WSAStartup" << WSAGetLastError();
     return -1;
   }
   server = socket(AF_INET, SOCK_STREAM, 0);
   if (server == INVALID_SOCKET) {
     cout << "Error initialization socket: " << WSAGetLastError() << endl;
+    LOG(ERROR) << "Error initialization socket: " << WSAGetLastError();
     return -1;
   }
   serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
   serverAddr.sin_family = AF_INET;
   serverAddr.sin_port = htons(6666);
-  if (bind(server, (SOCKADDR *)&serverAddr, sizeof(serverAddr)) ==
+  if (::bind(server, (SOCKADDR *)&serverAddr, sizeof(serverAddr)) ==
       SOCKET_ERROR) {
     cout << "Bind function failed with error: " << WSAGetLastError() << endl;
+    LOG(ERROR) << "Bind function failed with error: " << WSAGetLastError();
     return -1;
   }
 
-  if (listen(server, 0) == SOCKET_ERROR) {
+  if (::listen(server, 0) == SOCKET_ERROR) {
     cout << "Listen function failed with error: " << WSAGetLastError() << endl;
+    LOG(ERROR) << "Listen function failed with error: " << WSAGetLastError();
     return -1;
   }
-  cout << "Listening for incoming connections...." << endl;
+  LOG(INFO) << "Listening for incoming connections...." << endl;
 
   int clientAddrSize = sizeof(clientAddr);
-  while ((client = accept(server, (SOCKADDR *)&clientAddr, &clientAddrSize)) != INVALID_SOCKET) {
-    cout << "Client connected!" << endl;
-    cout << "Now you can use our live chat application. "
+  while ((client = ::accept(server, (SOCKADDR *)&clientAddr, &clientAddrSize)) != INVALID_SOCKET) {
+    LOG(INFO) << "Client connected!" << endl;
+    LOG(INFO) << "Now you can use our live chat application. "
          << "Enter \"exit\" to disconnect" << endl;
+    LOG(INFO) << "Client connected!\n";
 
     thread t1(serverReceive, client);
     t1.detach();

@@ -47,25 +47,28 @@ void serverForwardMessage(int from, int to, char* encrypted_message, int len);
 void serverReceive(SOCKET client) {
     const int MAX_BUFFER_SIZE = 4096;
     char buffer[MAX_BUFFER_SIZE] = {0};
+    char decrypted[MAX_BUFFER_SIZE] = { 0 };
     int offset = 0;
     int readed = -1;
     int curr_payload_len = -1;
 
     while (true) {
-        int toread = MAX_BUFFER_SIZE - offset;
-        if (curr_payload_len > 0) {
-            toread = curr_payload_len - (offset - 13);
-        }
+        if (offset < 13) {
+            int toread = MAX_BUFFER_SIZE - offset;
+            if (curr_payload_len > 0) {
+                toread = curr_payload_len - (offset - 13);
+            }
 
-        if ((readed = recv(client, buffer + offset, toread, 0)) == SOCKET_ERROR) {
-            LOG(INFO) << "recv function failed with error " << WSAGetLastError() << endl;
-            return;
-        }
+            if ((readed = recv(client, buffer + offset, toread, 0)) == SOCKET_ERROR) {
+                LOG(INFO) << "recv function failed with error " << WSAGetLastError() << endl;
+                return;
+            }
 
-        if (readed < 13) {
-            offset += readed;
-            continue;
-        }
+            if (readed < 13) {
+                offset += readed;
+                continue;
+            }
+        } 
 
         int msg_type = buffer[0];
         int msg_from = *(int*)(buffer + 1);
@@ -80,28 +83,32 @@ void serverReceive(SOCKET client) {
             continue;
         }
 
+        memset(decrypted, 0, MAX_BUFFER_SIZE);
+
         int uid = -1;
         switch (msg_type) {
         case MESSAGE_TYPE_USERNAME:
-            decrypt_AES(buffer + 13, offset - 13);
+            memcpy(decrypted, buffer + 13, payload_len);
+            decrypt_AES(decrypted, payload_len);
             uid = (int)userList.size();
-            userList.push_back({ uid, std::string(buffer + 13), client});
-            LOG(INFO) << "Client #" << uid << ": " <<  buffer + 13 << " added to list\n";
+            userList.push_back({ uid, std::string(decrypted), client});
+            LOG(INFO) << "Client #" << uid << ": " << decrypted << " added to list\n";
 
             serverSendLoginMessage(client, uid);
 
             break;
         case MESSAGE_TYPE_MESSAGE:
-            LOG(INFO) << "Client msg(encrypted): " << buffer + 13 << ", to: " << msg_to << "\n";
+            memcpy(decrypted, buffer + 13, payload_len);
+            LOG(INFO) << "Client msg(encrypted): " << decrypted << ", to: " << msg_to << "\n";
 
             if (msg_to == -1) {
                 // broadcast
-                decrypt_AES(buffer + 13, offset - 13);
-                LOG(INFO) << "broadcast msg: " << buffer + 13 << "\n";
+                decrypt_AES(decrypted, payload_len);
+                LOG(INFO) << "broadcast msg: " << decrypted << "\n";
             }
             else {
                 // p2p
-                serverForwardMessage(msg_from, msg_to, buffer + 13, offset - 13);
+                serverForwardMessage(msg_from, msg_to, buffer + 13, payload_len);
             }
 
             break;
@@ -115,8 +122,16 @@ void serverReceive(SOCKET client) {
             break;
         }
 
-        memset(buffer, 0, sizeof(buffer));
-        offset = 0;
+        if (offset > 13 + payload_len) {
+            // more than one packet
+            memmove(buffer, buffer + 13 + payload_len, offset - (13 + payload_len));
+            cout << "more than one packet: " << offset - (13 + payload_len) << endl;
+            offset -= (13 + payload_len);
+        }
+        else {
+            memset(buffer, 0, sizeof(buffer));
+            offset = 0;
+        }
     }
 }
 
@@ -144,10 +159,9 @@ void serverSendUserList(SOCKET client)
     }
 
     memcpy(buffer + 9, &offset, 4);
-    encrypt_AES(buflist, offset);
-    memcpy(buffer + 13, buflist, strlen(buflist));
+    memcpy(buffer + 13, buflist, offset);
 
-    if (send(client, buffer, 13 + strlen(buflist), 0) == SOCKET_ERROR) {
+    if (send(client, buffer, 13 + offset, 0) == SOCKET_ERROR) {
         LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;
     }
 }
@@ -162,16 +176,12 @@ void serverSendLoginMessage(SOCKET client, int uid) {
     buffer[0] = MESSAGE_TYPE_LOGIN;
     memset(buffer + 1, 0, 4);
     memset(buffer + 5, 0, 4);
-    int size = 0;
+    int size = 4;
     memcpy(buffer + 9, &size, 4);
-
-    char tmp[64] = { 0 };
-    memcpy(tmp, &uid, 4);
-    encrypt_AES(tmp, 4);
     
-    memcpy(buffer + 13, tmp, strlen(tmp));
+    memcpy(buffer + 13, &uid, 4);
 
-    if (send(client, buffer, 13 + strlen(tmp), 0) == SOCKET_ERROR) {
+    if (send(client, buffer, 13 + 4, 0) == SOCKET_ERROR) {
         LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;
     }
 }

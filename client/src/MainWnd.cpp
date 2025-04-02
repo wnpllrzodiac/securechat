@@ -52,38 +52,41 @@ void clientReceive(MainWnd* ins) {
     int readed = -1;
     int curr_payload_len = -1;
     while (true) {
-        int toread = MAX_BUFFER_SIZE - offset;
-        if (curr_payload_len > 0) {
-            toread = curr_payload_len - (offset - 13);
-        }
+        if (offset < 13) {
+            int toread = MAX_BUFFER_SIZE - offset;
+            if (curr_payload_len > 0) {
+                toread = curr_payload_len - (offset - 13);
+            }
 
-        if ((readed = recv(server, buffer + offset, toread, 0)) == SOCKET_ERROR) {
-            cout << "recv function failed with error " << WSAGetLastError() << endl;
-            return;
-        }
+            if ((readed = recv(server, buffer + offset, toread, 0)) == SOCKET_ERROR) {
+                cout << "recv function failed with error " << WSAGetLastError() << endl;
+                return;
+            }
 
-        if (readed < 13) {
-            offset += readed;
-            continue;
+            if (readed < 13) {
+                offset += readed;
+                continue;
+            }
         }
 
         int msg_type = buffer[0];
         int msg_from = *(int*)(buffer + 1);
         int msg_to = *(int*)(buffer + 5);
         int payload_len = *(int*)(buffer + 9);
-        std::cout << "msg type: " << msg_type << ", msg_len: " << payload_len << ", from: " << msg_from << ", to: " << msg_to << std::endl;
 
         offset += readed;
         if (offset < 13 + payload_len) {
             // not enough data
             curr_payload_len = payload_len;
+            std::cout << "not enough data for payload_len: " << offset << ", " << 13 + payload_len << endl;
             continue;
         }
+
+        std::cout << "msg type: " << msg_type << ", msg_len: " << payload_len << ", from: " << msg_from << ", to: " << msg_to << std::endl;
 
         switch (msg_type) {
         case MESSAGE_TYPE_LOGIN:
             cout << "Login message received" << endl;
-            decrypt_AES(buffer + 13, offset - 13);
             int uid;
             memcpy(&uid, buffer + 13, 4);
             cout << "Your user id is: " << uid << endl;
@@ -94,15 +97,42 @@ void clientReceive(MainWnd* ins) {
             cout << "Server msg: " << buffer + 13;
             break;
         case MESSAGE_TYPE_LIST:
-            // 4 bytes: id, 4 bytes: size, n bytes: username
-            // ... array
+            {
+                ins->clearUsers();
+                ins->addUser(-1, "all");
+
+                char* data = buffer + 13;
+                // 4 bytes: id, 4 bytes: size, n bytes: username
+                // ... array
+                for (int pos = 0; pos < payload_len;) {
+                    int uid = *(int*)(data + pos);
+                    int name_size = *(int*)(data + pos + 4);
+                    char name[64] = { 0 };
+                    memcpy(name, data + pos + 8, name_size);
+                    cout << "Client: #" << uid << ", " << name << endl;
+
+                    ins->addUser(uid, name);
+
+                    pos += (8 + name_size);
+                }
+            }
+            
+
 			break;
         default:
             break;
         }
 
-        memset(buffer, 0, sizeof(buffer));
-        offset = 0;
+        if (offset > 13 + payload_len) {
+            // more than one packet
+            memmove(buffer, buffer + 13 + payload_len, offset - (13 + payload_len));
+            cout << "more than one packet: " << offset - (13 + payload_len) << endl;
+            offset -= (13 + payload_len);
+        }
+        else {
+            memset(buffer, 0, sizeof(buffer));
+            offset = 0;
+        }
     }
 }
 
@@ -139,12 +169,15 @@ void clientSend(MainWnd * ins) {
     }
 
     buffer[0] = MESSAGE_TYPE_GETLIST;
-    int size = 0;
+    size = 0;
     memcpy(buffer + 9, &size, 4);
+    msg_len = 13; // no payload
     if (send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
         cout << "send failed with error: " << WSAGetLastError() << endl;
         return;
     }
+    
+    cout << "MESSAGE_TYPE_GETLIST sent" << endl;
 
     return;
 
@@ -191,7 +224,7 @@ MainWnd::MainWnd(QWidget* parent)
 {
 	ui.setupUi(this);
 
-	setWindowTitle("Oral Camera");
+	setWindowTitle("Chat APP");
 
     QScrollArea* scrollArea = ui.scrollAreaHistory;
     m_logTextEdit = new QTextEdit();
@@ -249,6 +282,23 @@ void MainWnd::sendData()
         return;
     }
 
+}
+
+void MainWnd::addUser(int uid, const char* username)
+{
+    QListWidgetItem* newItem = new QListWidgetItem(QString(username));
+    newItem->setData(100, uid);
+    ui.listWidgetClients->addItem(newItem);
+}
+
+void MainWnd::removeUser(int uid)
+{
+
+}
+
+void MainWnd::clearUsers()
+{
+    ui.listWidgetClients->clear();
 }
 
 int MainWnd::connectToServer()

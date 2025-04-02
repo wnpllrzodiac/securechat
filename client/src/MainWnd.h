@@ -23,6 +23,9 @@ public:
     SOCKET getServerSocket() const { return m_server; }
     void setUid(int uid) { m_uid = uid; }
     int getUid() const { return m_uid; }
+    void clearUsers();
+    void addUser(int uid, const char* username);
+    void removeUser(int uid);
 private:
     int connectToServer();
     void sendData();

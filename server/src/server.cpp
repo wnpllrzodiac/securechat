@@ -20,6 +20,8 @@ std::vector<ClientInfo> userList;
 
 enum MESSAGE_TYPE {
     MESSAGE_TYPE_LOGIN = 10,
+    MESSAGE_TYPE_GETLIST,
+    MESSAGE_TYPE_LIST,
     MESSAGE_TYPE_USERNAME = 20,
     MESSAGE_TYPE_MESSAGE = 30,
     MESSAGE_TYPE_EXIT = 40,
@@ -33,6 +35,7 @@ enum MESSAGE_TYPE {
 n bytes: message
 */
 
+void serverSendUserList(SOCKET client);
 void serverSendLoginMessage(SOCKET client, int uid);
 void serverForwardMessage(int from, int to, char* encrypted_message, int len);
 
@@ -102,6 +105,9 @@ void serverReceive(SOCKET client) {
             }
 
             break;
+        case MESSAGE_TYPE_GETLIST:
+            serverSendUserList(client);
+            break;
         case MESSAGE_TYPE_EXIT:
             LOG(INFO) << "Client Disconnected.";
             break;
@@ -111,6 +117,38 @@ void serverReceive(SOCKET client) {
 
         memset(buffer, 0, sizeof(buffer));
         offset = 0;
+    }
+}
+
+void serverSendUserList(SOCKET client)
+{
+    char buffer[1024] = { 0 };
+    buffer[0] = MESSAGE_TYPE_LIST;
+    memset(buffer + 1, 0, 4); // from
+    memset(buffer + 5, 0, 4); // to
+
+    char buflist[1024] = { 0 };
+    int offset = 0;
+    for (int i = 0; i < userList.size(); i++) {
+        ClientInfo info = userList[i];
+        int id = info.id;
+        std:string username = info.username.c_str();
+        int len = username.length();
+
+        // 4 bytes: id, 4 bytes: size, n bytes: username
+        // ... array
+        memcpy(buflist + offset, &id, 4);
+        memcpy(buflist + offset + 4, &len, 4);
+        memcpy(buflist + offset + 8, username.c_str(), len);
+        offset += (8 + len);
+    }
+
+    memcpy(buffer + 9, &offset, 4);
+    encrypt_AES(buflist, offset);
+    memcpy(buffer + 13, buflist, strlen(buflist));
+
+    if (send(client, buffer, 13 + strlen(buflist), 0) == SOCKET_ERROR) {
+        LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;
     }
 }
 

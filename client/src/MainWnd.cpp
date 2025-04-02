@@ -19,6 +19,8 @@ using namespace std;
 
 enum MESSAGE_TYPE {
     MESSAGE_TYPE_LOGIN = 10,
+    MESSAGE_TYPE_GETLIST,
+    MESSAGE_TYPE_LIST,
     MESSAGE_TYPE_USERNAME = 20,
     MESSAGE_TYPE_MESSAGE = 30,
     MESSAGE_TYPE_EXIT = 40,
@@ -91,6 +93,10 @@ void clientReceive(MainWnd* ins) {
             decrypt_AES(buffer + 13, offset - 13);
             cout << "Server msg: " << buffer + 13;
             break;
+        case MESSAGE_TYPE_LIST:
+            // 4 bytes: id, 4 bytes: size, n bytes: username
+            // ... array
+			break;
         default:
             break;
         }
@@ -117,6 +123,9 @@ void clientSend(MainWnd * ins) {
     encrypt_AES(username, strlen(username));
 
     buffer[0] = MESSAGE_TYPE_USERNAME;
+    int invalid_uid = -1;
+    memcpy(buffer + 1, &invalid_uid, 4);
+    memcpy(buffer + 5, &invalid_uid, 4);
     // fix buffer[1] to buffer[4] with the length of the username
     int size = strlen(username);
     memcpy(buffer + 9, &size, 4);
@@ -124,6 +133,14 @@ void clientSend(MainWnd * ins) {
     int msg_len = 13 + strlen(username);
     cout << "msg_len: " << msg_len << endl;
 
+    if (send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
+        cout << "send failed with error: " << WSAGetLastError() << endl;
+        return;
+    }
+
+    buffer[0] = MESSAGE_TYPE_GETLIST;
+    int size = 0;
+    memcpy(buffer + 9, &size, 4);
     if (send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
         cout << "send failed with error: " << WSAGetLastError() << endl;
         return;

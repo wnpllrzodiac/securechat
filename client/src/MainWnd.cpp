@@ -8,6 +8,70 @@
 
 using namespace std;
 
+const char* name_lists[] = {
+    "Ash",
+    "Skye",
+    "Nana"
+    "Clover",
+    "Kevin",
+    "Muriel",
+    "Buzz",
+    "Baron",
+    "August",
+    "Mimi",
+    "Muse",
+    "Jaxon",
+    "Titan",
+    "Queenie",
+    "Roderick",
+    "Maxwell",
+    "Ralap",
+    "Luna",
+    "Michelle",
+    "Cosima",
+    "Sandy",
+    "Eric",
+    "Amari",
+    "Esme",
+    "Kennedy",
+    "Ah",
+    "Herbert",
+    "Quinn",
+    "Philip",
+    "Theodore",
+    "William",
+    "Alan",
+    "Amaya",
+    "Erika",
+    "Ciel",
+    "Cassiel",
+    "Jason",
+    "Darren",
+    "Miya",
+    "Marshall",
+    "Rhys",
+    "Demi",
+    "Regina",
+    "Cassiopeia",
+    "Jo",
+    "Derica ",
+    "Julian ",
+    "Kira",
+    "Geri",
+    "Frederica",
+    "Frederic",
+    "Cyan",
+    "Gilbert",
+    "Angel",
+    "tticus",
+    "Breaker",
+    "Kimi",
+    "Dione",
+    "airica",
+    "Gabrielle",
+    "Elijah",
+};
+
 // COLORS
 #define CYN "\x1B[36m"
 #define MAG "\x1B[35m"
@@ -247,6 +311,10 @@ MainWnd::MainWnd(QWidget* parent)
 
 	setWindowTitle("Chat APP");
 
+    srand(time(NULL));
+    int index = rand() % (sizeof(name_lists) / sizeof(char *));
+    ui.lineEditNickName->setText(name_lists[index]);
+
     QScrollArea* scrollArea = ui.scrollAreaHistory;
     m_logTextEdit = new QTextEdit();
     m_logTextEdit->setReadOnly(true);
@@ -262,6 +330,10 @@ MainWnd::MainWnd(QWidget* parent)
 
     QObject::connect(ui.pushButtonConnect, &QPushButton::clicked, this, &MainWnd::connectToServer);
     QObject::connect(ui.pushButtonSend, &QPushButton::clicked, this, &MainWnd::sendData);
+    QObject::connect(ui.listWidgetClients, &QListWidget::itemClicked, this, [&](QListWidgetItem* item) {
+        m_to_uid = item->data(100).toInt();
+        cout << "m_to_uid set to: " << m_to_uid << endl;
+    });
 }
 
 MainWnd::~MainWnd()

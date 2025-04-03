@@ -22,6 +22,8 @@ enum MESSAGE_TYPE {
     MESSAGE_TYPE_LOGIN = 10,
     MESSAGE_TYPE_GETLIST,
     MESSAGE_TYPE_LIST,
+    MESSAGE_TYPE_JOINED,
+    MESSAGE_TYPE_LEAVED,
     MESSAGE_TYPE_USERNAME = 20,
     MESSAGE_TYPE_MESSAGE = 30,
     MESSAGE_TYPE_EXIT = 40,
@@ -36,6 +38,8 @@ n bytes: message
 */
 
 void serverSendUserList(SOCKET client);
+void serverSendJoinedMessage(int uid, const char* username);
+void serverSendLeavedMessage(int uid);
 void serverSendLoginMessage(SOCKET client, int uid);
 void serverForwardMessage(int from, int to, char* encrypted_message, int len);
 
@@ -96,6 +100,7 @@ void serverReceive(SOCKET client) {
 
             serverSendLoginMessage(client, uid);
 
+            //serverSendJoinedMessage(uid, decrypted);
             break;
         case MESSAGE_TYPE_MESSAGE:
             memcpy(decrypted, buffer + 13, payload_len);
@@ -105,6 +110,12 @@ void serverReceive(SOCKET client) {
                 // broadcast
                 decrypt_AES(decrypted, payload_len);
                 LOG(INFO) << "broadcast msg: " << decrypted << "\n";
+
+                for (ClientInfo info : userList) {
+                    if (info.client != client) {
+						serverForwardMessage(msg_from, msg_to, buffer + 13, payload_len);
+					}
+                }
             }
             else {
                 // p2p
@@ -135,6 +146,38 @@ void serverReceive(SOCKET client) {
     }
 }
 
+void serverSendJoinedMessage(int uid, const char* username)
+{
+    char buffer[1024] = { 0 };
+    buffer[0] = MESSAGE_TYPE_JOINED;
+    int invalid_id = -1;
+    memcpy(buffer + 1, &invalid_id, 4); // from
+    memcpy(buffer + 5, &invalid_id, 4); // to
+
+    int len = strlen(username);
+
+    int payload_len = len + 4 + 4;
+    memcpy(buffer + 9, &payload_len, 4);
+
+    // 4 bytes: id, 4 bytes: size, n bytes: username
+    memcpy(buffer + 13, &uid, 4);
+    memcpy(buffer + 13 + 4, &len, 4);
+    memcpy(buffer + 13 + 8, username, len);
+
+    for (ClientInfo info : userList) {
+        if (info.id != uid) {
+            if (send(info.client, buffer, 13 + payload_len, 0) == SOCKET_ERROR) {
+                LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;
+            }
+        }
+    }
+}
+
+void serverSendLeavedMessage(int uid)
+{
+
+}
+
 void serverSendUserList(SOCKET client)
 {
     char buffer[1024] = { 0 };
@@ -147,7 +190,7 @@ void serverSendUserList(SOCKET client)
     for (int i = 0; i < userList.size(); i++) {
         ClientInfo info = userList[i];
         int id = info.id;
-        std:string username = info.username.c_str();
+        std::string username = info.username.c_str();
         int len = username.length();
 
         // 4 bytes: id, 4 bytes: size, n bytes: username

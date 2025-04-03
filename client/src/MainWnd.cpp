@@ -21,6 +21,8 @@ enum MESSAGE_TYPE {
     MESSAGE_TYPE_LOGIN = 10,
     MESSAGE_TYPE_GETLIST,
     MESSAGE_TYPE_LIST,
+    MESSAGE_TYPE_JOINED,
+    MESSAGE_TYPE_LEAVED,
     MESSAGE_TYPE_USERNAME = 20,
     MESSAGE_TYPE_MESSAGE = 30,
     MESSAGE_TYPE_EXIT = 40,
@@ -92,6 +94,23 @@ void clientReceive(MainWnd* ins) {
             cout << "Your user id is: " << uid << endl;
             ins->setUid(uid);
             break;
+        case MESSAGE_TYPE_JOINED:
+        case MESSAGE_TYPE_LEAVED:
+            {
+                char* data = buffer + 13;
+                // 4 bytes: id, 4 bytes: size, n bytes: username
+                int uid = *(int*)data;
+                int name_size = *(int*)(data + 4);
+                char name[64] = { 0 };
+                memcpy(name, data + 8, name_size);
+                cout << "Client: #" << uid << ", " << name << (msg_type == MESSAGE_TYPE_JOINED ? "joined" : "leaved") << endl;
+
+                if (msg_type == MESSAGE_TYPE_JOINED)
+                    ins->addUser(uid, name);
+                else
+                    ins->removeUser(uid);
+            }
+            break;
         case MESSAGE_TYPE_MESSAGE:
             decrypt_AES(buffer + 13, offset - 13);
             cout << "Server msg: " << buffer + 13;
@@ -159,8 +178,8 @@ void clientSend(MainWnd * ins) {
     // fix buffer[1] to buffer[4] with the length of the username
     int size = strlen(username);
     memcpy(buffer + 9, &size, 4);
-    memcpy(buffer + 13, username, strlen(username));
-    int msg_len = 13 + strlen(username);
+    memcpy(buffer + 13, username, size);
+    int msg_len = 13 + size;
     cout << "msg_len: " << msg_len << endl;
 
     if (send(server, buffer, msg_len, 0) == SOCKET_ERROR) {

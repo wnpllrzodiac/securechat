@@ -26,6 +26,7 @@ public:
     void clearUsers();
     void addUser(int uid, const char* username);
     void removeUser(int uid);
+    void appendMessageLog(int from, int to, const char* msg);
 private:
     int connectToServer();
     void sendData();

@@ -41,7 +41,7 @@ void serverSendUserList(SOCKET client);
 void serverSendJoinedMessage(int uid, const char* username);
 void serverSendLeavedMessage(int uid);
 void serverSendLoginMessage(SOCKET client, int uid);
-void serverForwardMessage(int from, int to, char* encrypted_message, int len);
+void serverForwardMessage(SOCKET socket, int from, int to, char* encrypted_message, int len);
 
 /**
  * @brief Function to receive data from the client, decrypt it using AES-128,
@@ -100,7 +100,7 @@ void serverReceive(SOCKET client) {
 
             serverSendLoginMessage(client, uid);
 
-            //serverSendJoinedMessage(uid, decrypted);
+            serverSendJoinedMessage(uid, decrypted);
             break;
         case MESSAGE_TYPE_MESSAGE:
             memcpy(decrypted, buffer + 13, payload_len);
@@ -112,14 +112,22 @@ void serverReceive(SOCKET client) {
                 LOG(INFO) << "broadcast msg: " << decrypted << "\n";
 
                 for (ClientInfo info : userList) {
-                    if (info.client != client) {
-						serverForwardMessage(msg_from, msg_to, buffer + 13, payload_len);
+                    if (info.id != msg_from) {
+                        LOG(INFO) << "broadcast msg to: " << info.id << "\n";
+						serverForwardMessage(info.client, msg_from, msg_to, buffer + 13, payload_len);
 					}
                 }
             }
             else {
                 // p2p
-                serverForwardMessage(msg_from, msg_to, buffer + 13, payload_len);
+                for (ClientInfo info : userList) {
+                    if (info.id == msg_to) {
+                        LOG(INFO) << "p2p msg to: " << info.id << "\n";
+                        serverForwardMessage(info.client, msg_from, msg_to, buffer + 13, payload_len);
+                        break;
+                    }
+                }
+                
             }
 
             break;
@@ -229,7 +237,7 @@ void serverSendLoginMessage(SOCKET client, int uid) {
     }
 }
 
-void serverForwardMessage(int from, int to, char* encrypted_message, int len) {
+void serverForwardMessage(SOCKET socket, int from, int to, char* encrypted_message, int len) {
     char buffer[1024] = { 0 };
     buffer[0] = MESSAGE_TYPE_MESSAGE;
     memcpy(buffer + 1, &from, 4);
@@ -238,17 +246,11 @@ void serverForwardMessage(int from, int to, char* encrypted_message, int len) {
 
     memcpy(buffer + 13, encrypted_message, len);
 
-    for (auto cli : userList) {
-        if (cli.id == to) {
-            if (send(cli.client, buffer, 13 + len, 0) == SOCKET_ERROR) {
-                LOG(ERROR) << "send failed with error " << WSAGetLastError() << endl;
-			}
-
-            LOG(INFO) << "message forwarded to: " << to;
-
-			break;
-		}
+    if (send(socket, buffer, 13 + len, 0) == SOCKET_ERROR) {
+        LOG(ERROR) << "send failed with error " << WSAGetLastError() << endl;
     }
+
+    LOG(INFO) << "message forwarded to: " << to;
 }
 
 /**

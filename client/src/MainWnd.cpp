@@ -103,7 +103,7 @@ void clientReceive(MainWnd* ins) {
                 int name_size = *(int*)(data + 4);
                 char name[64] = { 0 };
                 memcpy(name, data + 8, name_size);
-                cout << "Client: #" << uid << ", " << name << (msg_type == MESSAGE_TYPE_JOINED ? "joined" : "leaved") << endl;
+                cout << "Client: #" << uid << ", " << name << (msg_type == MESSAGE_TYPE_JOINED ? " joined" : " leaved") << endl;
 
                 if (msg_type == MESSAGE_TYPE_JOINED)
                     ins->addUser(uid, name);
@@ -113,7 +113,8 @@ void clientReceive(MainWnd* ins) {
             break;
         case MESSAGE_TYPE_MESSAGE:
             decrypt_AES(buffer + 13, offset - 13);
-            cout << "Server msg: " << buffer + 13;
+            cout << "#" << msg_from << " sent msg to " << msg_to << " :" << buffer + 13;
+            ins->appendMessageLog(msg_from, msg_to, buffer + 13);
             break;
         case MESSAGE_TYPE_LIST:
             {
@@ -130,7 +131,8 @@ void clientReceive(MainWnd* ins) {
                     memcpy(name, data + pos + 8, name_size);
                     cout << "Client: #" << uid << ", " << name << endl;
 
-                    ins->addUser(uid, name);
+                    if (ins->getNickName() != name)
+                        ins->addUser(uid, name);
 
                     pos += (8 + name_size);
                 }
@@ -313,6 +315,15 @@ void MainWnd::addUser(int uid, const char* username)
 void MainWnd::removeUser(int uid)
 {
 
+}
+
+void MainWnd::appendMessageLog(int from, int to, const char* msg)
+{
+    QString toDesc = "ALL";
+    if (to != -1)
+        toDesc = QString("#%1").arg(to);
+    QString str = QString("#%1 say %2 to %3").arg(from).arg(msg).arg(toDesc);
+    m_logTextEdit->append(str);
 }
 
 void MainWnd::clearUsers()

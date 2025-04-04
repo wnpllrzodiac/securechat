@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <openssl/aes.h>
+#include <openssl/des.h>
 #include <string>
 
 /**
@@ -52,6 +53,36 @@ void encrypt_AES(char *plaintext, size_t length) {
   }
 }
 
+void encrypt_DES(char* plaintext, size_t length, char* output, size_t *outlen) {
+    int DES_BLOCK_SIZE = 8;
+    const unsigned char* key = getkey();
+
+    size_t numBlocks = (length + (DES_BLOCK_SIZE - 1)) / DES_BLOCK_SIZE;
+    if (numBlocks * DES_BLOCK_SIZE > length) {
+        memset(plaintext + length, 0, numBlocks * DES_BLOCK_SIZE - length);
+    }
+
+    DES_key_schedule ks1;
+
+    unsigned char ke1[8], ivec[8];
+    memcpy(ke1, key, 8);
+    memcpy(ivec, "12345678", 8);
+
+    DES_set_key_unchecked((const_DES_cblock*)ke1, &ks1);
+
+    for (size_t i = 0; i < numBlocks; ++i) {
+        DES_cbc_encrypt(
+            reinterpret_cast<const unsigned char*>(plaintext + i * DES_BLOCK_SIZE),
+            reinterpret_cast<unsigned char*>(output + i * DES_BLOCK_SIZE),
+            DES_BLOCK_SIZE,
+            &ks1, 
+            (DES_cblock*)ivec, 
+            DES_ENCRYPT);
+    }
+    
+    *outlen = numBlocks * DES_BLOCK_SIZE;
+}
+
 /**
  * @brief Decryption function
  * Decrypts text using aes-128
@@ -73,4 +104,33 @@ void decrypt_AES(char *ciphertext, size_t length) {
         reinterpret_cast<unsigned char *>(ciphertext + i * AES_BLOCK_SIZE),
         &aesKey);
   }
+}
+
+void decrypt_DES(char* ciphertext, size_t length, char* output, size_t* outlen) {
+    int DES_BLOCK_SIZE = 8;
+    const unsigned char* key = getkey();
+
+    size_t numBlocks = length / DES_BLOCK_SIZE;
+    DES_key_schedule ks1;
+
+    unsigned char ke1[8], ivec[8];
+    memcpy(ke1, key, 8);
+    memcpy(ivec, "12345678", 8);
+
+    DES_set_key_unchecked((const_DES_cblock*)ke1, &ks1);
+
+    for (size_t i = 0; i < numBlocks + 1; ++i) {
+        DES_cbc_encrypt(
+            reinterpret_cast<const unsigned char*>(ciphertext + i * DES_BLOCK_SIZE),
+            reinterpret_cast<unsigned char*>(output + i * DES_BLOCK_SIZE),
+            i < numBlocks ? DES_BLOCK_SIZE : length - numBlocks * DES_BLOCK_SIZE,
+            &ks1,
+            (DES_cblock*)ivec,
+            DES_DECRYPT);
+    }
+
+    *outlen = numBlocks * DES_BLOCK_SIZE;
+    if (numBlocks * DES_BLOCK_SIZE > length) {
+        memset(output + length, 0, numBlocks * DES_BLOCK_SIZE - length);
+    }
 }

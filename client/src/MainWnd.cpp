@@ -358,6 +358,13 @@ void MainWnd::sendData()
     strcpy(msg, strMsg.toStdString().c_str());
     encrypt_AES(msg, strlen(msg));
 
+    char sss[256] = { 0 };
+    char ddd[256] = { 0 };
+    size_t outlen;
+    size_t outlen2;
+    encrypt_DES((char *)"12345678", 8, sss, &outlen);
+    decrypt_DES(sss, 8, ddd, &outlen2);
+
     char buffer[4096] = { 0 };
 
     memset(buffer, 0, 4096);

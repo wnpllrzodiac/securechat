@@ -2,6 +2,8 @@
 //#include <fstream>
 //#include <iostream>
 #include <openssl/aes.h>
+#include <openssl/des.h>
+#include <stdio.h>
 //#include <string>
 
 /**
@@ -53,6 +55,55 @@ void encrypt_AES(char *plaintext, size_t length) {
         (unsigned char*)(plaintext + i * AES_BLOCK_SIZE),
         &aesKey);
   }
+}
+
+#define DES_BLOCK_SIZE 8
+void encrypt_DES_File(char* filepath, char* encfilepath)
+{
+    const unsigned char* key = getkey();
+
+    unsigned char indata[DES_BLOCK_SIZE] = {0};
+    unsigned char outdata[DES_BLOCK_SIZE] = { 0 };
+
+    FILE* pFile = NULL;
+    pFile = fopen(filepath, "rb");
+    if (pFile == NULL)
+        return;
+
+    FILE* pEncryptedFile = NULL;
+    pEncryptedFile = fopen(encfilepath, "wb");
+    if (pEncryptedFile == NULL)
+        return;
+
+    DES_key_schedule ks1;
+
+    unsigned char ke1[8], ivec[8];
+    memcpy(ke1, key, 8);
+    memcpy(ivec, "12345678", 8);
+
+    DES_set_key_unchecked((const_DES_cblock*)ke1, &ks1);
+
+    int bytes_read;
+    int bytes_written;
+    while (1) {
+        memset(indata, DES_BLOCK_SIZE, 0);
+        memset(outdata, DES_BLOCK_SIZE, 0);
+
+        bytes_read = fread(indata, 1, DES_BLOCK_SIZE, pFile);
+
+        DES_cbc_encrypt(
+            (const unsigned char*)indata,
+            outdata,
+            DES_BLOCK_SIZE,
+            &ks1,
+            (DES_cblock*)ivec,
+            DES_ENCRYPT);
+
+        bytes_written = fwrite(outdata, 1, bytes_read, pEncryptedFile);
+
+        if (bytes_read < DES_BLOCK_SIZE)
+            break;
+    }
 }
 
 /**

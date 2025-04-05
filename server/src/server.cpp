@@ -283,12 +283,39 @@ void serverForwardMessage(SOCKET socket, int from, int to, char* encrypted_messa
     LOG(INFO) << "message forwarded to: " << to;
 }
 
+BOOL WINAPI console_handler(DWORD cevent)
+{
+    switch (cevent)
+    {
+    case  CTRL_C_EVENT:
+        LOG(INFO) << "encrypt log file with DES\n";
+        encrypt_DES_File("server.log", "server_enc.log");
+        exit(0);
+        break;
+    case  CTRL_BREAK_EVENT:
+    case  CTRL_CLOSE_EVENT:
+    case  CTRL_LOGOFF_EVENT:
+    case  CTRL_SHUTDOWN_EVENT:
+    {
+        // your code here
+        exit(0);
+        break;
+    }
+    default:
+        break;
+    }
+    return  TRUE;
+};
+
 /**
  * @brief Main function to create a server, accept client connections, and start
  * the chat application.
  * @return {int} Exit status of the application.
  */
 int main() {
+  if (SetConsoleCtrlHandler((PHANDLER_ROUTINE)console_handler, TRUE) == FALSE)
+      return -1;
+
   auto sink_cout = make_shared<AixLog::SinkCout>(AixLog::Severity::info);
   auto sink_file = make_shared<AixLog::SinkFile>(AixLog::Severity::info, "server.log");
   AixLog::Log::init({ sink_cout, sink_file });

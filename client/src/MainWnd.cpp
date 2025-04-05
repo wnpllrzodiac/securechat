@@ -246,9 +246,9 @@ void clientSend(MainWnd * ins) {
     memcpy(buffer + 9, &size, 4);
     memcpy(buffer + 13, username, size);
     int msg_len = 13 + size;
-    cout << "msg_len: " << msg_len << endl;
+    cout << "to send msg type: " << MESSAGE_TYPE_USERNAME << ", msg_len: " << msg_len << endl;
 
-    if (send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
+    if (::send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
         cout << "send failed with error: " << WSAGetLastError() << endl;
         return;
     }
@@ -257,7 +257,8 @@ void clientSend(MainWnd * ins) {
     size = 0;
     memcpy(buffer + 9, &size, 4);
     msg_len = 13; // no payload
-    if (send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
+    cout << "to send msg type: " << MESSAGE_TYPE_GETLIST << ", msg_len: " << msg_len << endl;
+    if (::send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
         cout << "send failed with error: " << WSAGetLastError() << endl;
         return;
     }
@@ -293,7 +294,8 @@ void clientSend(MainWnd * ins) {
         memcpy(buffer + 13, msg, strlen(msg));
         int msg_len = 13 + strlen(msg);
 
-        if (send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
+        cout << "to send msg type: " << MESSAGE_TYPE_MESSAGE << ", msg_len: " << msg_len << endl;
+        if (::send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
             cout << "send failed with error: " << WSAGetLastError() << endl;
             return;
         }
@@ -358,13 +360,6 @@ void MainWnd::sendData()
     strcpy(msg, strMsg.toStdString().c_str());
     encrypt_AES(msg, strlen(msg));
 
-    char sss[256] = { 0 };
-    char ddd[256] = { 0 };
-    size_t outlen;
-    size_t outlen2;
-    encrypt_DES((char *)"12345678", 8, sss, &outlen);
-    decrypt_DES(sss, 8, ddd, &outlen2);
-
     char buffer[4096] = { 0 };
 
     memset(buffer, 0, 4096);
@@ -376,8 +371,9 @@ void MainWnd::sendData()
     memcpy(buffer + 9, &size, 4);
     memcpy(buffer + 13, msg, strlen(msg));
     int msg_len = 13 + strlen(msg);
+    cout << "to send msg type: " << MESSAGE_TYPE_MESSAGE << ", msg_len: " << msg_len << endl;
 
-    if (send(m_server, buffer, msg_len, 0) == SOCKET_ERROR) {
+    if (::send(m_server, buffer, msg_len, 0) == SOCKET_ERROR) {
         cout << "send failed with error: " << WSAGetLastError() << endl;
         return;
     }
@@ -401,6 +397,9 @@ void MainWnd::appendMessageLog(int from, int to, const char* msg)
     QString toDesc = "ALL";
     if (to != -1)
         toDesc = QString("#%1").arg(to);
+    if (to == m_uid)
+        toDesc = "Me";
+
     QString str = QString("#%1 say %2 to %3").arg(from).arg(msg).arg(toDesc);
     m_logTextEdit->append(str);
 }

@@ -8,7 +8,7 @@ find_package(OpenSSL REQUIRED)
 include_directories(${OPENSSL_INCLUDE_DIR})
 
 
-add_executable(server src/server.cpp src/cipher.cpp)
+add_executable(server src/server.cpp src/cipher.c)
 
 
 target_link_libraries(server PRIVATE wsock32 ws2_32)

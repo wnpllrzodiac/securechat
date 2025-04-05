@@ -16,7 +16,7 @@ set(CMAKE_AUTORCC ON)
 include_directories(${OPENSSL_INCLUDE_DIR})
 
 
-add_executable(client src/client.cpp src/cipher.cpp src/MainWnd.cpp)
+add_executable(client src/client.cpp src/cipher.c src/MainWnd.cpp)
 
 target_link_libraries(client PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
 target_link_libraries(client PRIVATE wsock32 ws2_32)

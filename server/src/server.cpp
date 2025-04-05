@@ -65,11 +65,24 @@ void serverReceive(SOCKET client) {
 
             if ((readed = recv(client, buffer + offset, toread, 0)) == SOCKET_ERROR) {
                 LOG(INFO) << "recv function failed with error " << WSAGetLastError() << endl;
+                int leaved_uid = -1;
+                for (std::vector<ClientInfo>::iterator it = userList.begin();it != userList.end(); ++it) {
+                    if (it->client == client) {
+                        leaved_uid = it->id;
+                        it = userList.erase(it);
+                        break;
+                    }
+                }
+
+                serverSendLeavedMessage(leaved_uid);
+
+                LOG(WARNING) << "recv thread exited" << std::endl;
                 return;
             }
 
+            offset += readed;
+
             if (readed < 13) {
-                offset += readed;
                 continue;
             }
         } 
@@ -80,7 +93,6 @@ void serverReceive(SOCKET client) {
         int payload_len = *(int*)(buffer + 9);
         LOG(INFO) << "msg type: " << msg_type << ", msg_len: " << payload_len << ", from: " << msg_from << ", to: " << msg_to << std::endl;
 
-        offset += readed;
         if (offset < 13 + payload_len) {
             // not enough data
             curr_payload_len = payload_len;
@@ -183,7 +195,25 @@ void serverSendJoinedMessage(int uid, const char* username)
 
 void serverSendLeavedMessage(int uid)
 {
+    char buffer[1024] = { 0 };
+    buffer[0] = MESSAGE_TYPE_LEAVED;
+    int invalid_id = -1;
+    memcpy(buffer + 1, &invalid_id, 4); // from
+    memcpy(buffer + 5, &invalid_id, 4); // to
 
+    int payload_len = 4;
+    memcpy(buffer + 9, &payload_len, 4);
+
+    // 4 bytes: id, 4 bytes: size, n bytes: username
+    memcpy(buffer + 13, &uid, 4);
+
+    for (ClientInfo info : userList) {
+        if (info.id != uid) {
+            if (send(info.client, buffer, 13 + payload_len, 0) == SOCKET_ERROR) {
+                LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;
+            }
+        }
+    }
 }
 
 void serverSendUserList(SOCKET client)

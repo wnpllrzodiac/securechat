@@ -1,9 +1,9 @@
-#include <cstring>
-#include <fstream>
-#include <iostream>
+//#include <cstring>
+//#include <fstream>
+//#include <iostream>
 #include <openssl/aes.h>
 #include <openssl/des.h>
-#include <string>
+//#include <string>
 
 /**
  * @brief Function for getting the key
@@ -11,7 +11,7 @@
  * @return {const unsigned char *} key 16 bit key
  */
 const unsigned char *getkey() {
-  std::ifstream file("key.txt");
+  /*std::ifstream file("key.txt");
   std::string line;
   static const unsigned char defaultKey[16] = {0};
 
@@ -29,7 +29,8 @@ const unsigned char *getkey() {
 
   std::cout << "The file is empty" << std::endl;
   file.close();
-  return defaultKey;
+  return defaultKey;*/
+    return "1234567890abcdef";
 }
 
 /**
@@ -47,8 +48,8 @@ void encrypt_AES(char *plaintext, size_t length) {
 
   for (size_t i = 0; i < numBlocks + 1; ++i) {
     AES_encrypt(
-        reinterpret_cast<const unsigned char *>(plaintext + i * AES_BLOCK_SIZE),
-        reinterpret_cast<unsigned char *>(plaintext + i * AES_BLOCK_SIZE),
+        (const unsigned char *)(plaintext + i * AES_BLOCK_SIZE),
+        (unsigned char*)(plaintext + i * AES_BLOCK_SIZE),
         &aesKey);
   }
 }
@@ -72,8 +73,8 @@ void encrypt_DES(char* plaintext, size_t length, char* output, size_t *outlen) {
 
     for (size_t i = 0; i < numBlocks; ++i) {
         DES_cbc_encrypt(
-            reinterpret_cast<const unsigned char*>(plaintext + i * DES_BLOCK_SIZE),
-            reinterpret_cast<unsigned char*>(output + i * DES_BLOCK_SIZE),
+            (const unsigned char*)(plaintext + i * DES_BLOCK_SIZE),
+            (unsigned char*)(output + i * DES_BLOCK_SIZE),
             DES_BLOCK_SIZE,
             &ks1, 
             (DES_cblock*)ivec, 
@@ -99,9 +100,9 @@ void decrypt_AES(char *ciphertext, size_t length) {
 
   for (size_t i = 0; i < numBlocks + 1; ++i) {
     AES_decrypt(
-        reinterpret_cast<const unsigned char *>(ciphertext +
+        (const unsigned char*)(ciphertext +
                                                 i * AES_BLOCK_SIZE),
-        reinterpret_cast<unsigned char *>(ciphertext + i * AES_BLOCK_SIZE),
+        (unsigned char*)(ciphertext + i * AES_BLOCK_SIZE),
         &aesKey);
   }
 }
@@ -121,8 +122,8 @@ void decrypt_DES(char* ciphertext, size_t length, char* output, size_t* outlen) 
 
     for (size_t i = 0; i < numBlocks + 1; ++i) {
         DES_cbc_encrypt(
-            reinterpret_cast<const unsigned char*>(ciphertext + i * DES_BLOCK_SIZE),
-            reinterpret_cast<unsigned char*>(output + i * DES_BLOCK_SIZE),
+            (const unsigned char*)(ciphertext + i * DES_BLOCK_SIZE),
+            (unsigned char*)(output + i * DES_BLOCK_SIZE),
             i < numBlocks ? DES_BLOCK_SIZE : length - numBlocks * DES_BLOCK_SIZE,
             &ks1,
             (DES_cblock*)ivec,

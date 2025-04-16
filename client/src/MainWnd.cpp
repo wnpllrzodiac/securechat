@@ -87,7 +87,7 @@ enum MESSAGE_TYPE {
     MESSAGE_TYPE_LIST,
     MESSAGE_TYPE_JOINED,
     MESSAGE_TYPE_LEAVED,
-    MESSAGE_TYPE_USERNAME = 20,
+    MESSAGE_TYPE_LOGINRESULT = 20,
     MESSAGE_TYPE_MESSAGE = 30,
     MESSAGE_TYPE_EXIT = 40,
 };
@@ -237,7 +237,7 @@ void clientSend(MainWnd * ins) {
     strcpy(username, ins->getNickName().toStdString().c_str());
     encrypt_AES(username, strlen(username));
 
-    buffer[0] = MESSAGE_TYPE_USERNAME;
+    buffer[0] = MESSAGE_TYPE_LOGIN;
     int invalid_uid = -1;
     memcpy(buffer + 1, &invalid_uid, 4);
     memcpy(buffer + 5, &invalid_uid, 4);
@@ -411,7 +411,8 @@ void MainWnd::clearUsers()
 
 int MainWnd::connectToServer()
 {
-    m_nickname = ui.lineEditNickName->text();
+    m_uid = ui.lineEditNickName->text().toInt();
+    m_password = ui.lineEditPassword->text();
     
     SOCKADDR_IN addr;
 

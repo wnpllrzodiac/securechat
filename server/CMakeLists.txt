@@ -5,15 +5,16 @@ set(CMAKE_CXX_STANDARD 11)
 
 find_package(OpenSSL REQUIRED)
 find_package(SQLiteCpp REQUIRED)
+find_package(rapidjson REQUIRED)
 
 include_directories(${OPENSSL_INCLUDE_DIR})
 
 
-add_executable(server src/server.cpp src/cipher.c)
+add_executable(server src/server.cpp src/httplib.h src/cipher.c)
 
 
 target_link_libraries(server PRIVATE wsock32 ws2_32)
-target_link_libraries(server PRIVATE ${OPENSSL_LIBRARIES} SQLiteCpp)
+target_link_libraries(server PRIVATE ${OPENSSL_LIBRARIES} SQLiteCpp rapidjson)
 
 add_subdirectory(tests)
 

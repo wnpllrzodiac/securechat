@@ -1,4 +1,5 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
+#include "httplib.h"
 #include "../include/cipher.h"
 #include <cstdio>
 #include <cstring>
@@ -8,8 +9,12 @@
 #include <winsock2.h>
 #include <SQLiteCpp/SQLiteCpp.h>
 #include "aixlog.hpp"
+#include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
 
 using namespace std;
+using namespace httplib;
 
 struct ClientInfo {
     int         id;
@@ -43,6 +48,8 @@ void serverSendJoinedMessage(int uid, const char* username);
 void serverSendLeavedMessage(int uid);
 void serverSendLoginMessage(SOCKET client, int uid);
 void serverForwardMessage(SOCKET socket, int from, int to, char* encrypted_message, int len);
+
+int db_add_user(const char* username, const char* gender, int age, const char* email, const char* password);
 
 /**
  * @brief Function to receive data from the client, decrypt it using AES-128,
@@ -308,6 +315,73 @@ BOOL WINAPI console_handler(DWORD cevent)
     return  TRUE;
 };
 
+void http_server()
+{
+    Server svr;
+
+    auto ret = svr.set_mount_point("/", "D:\\git\\securechat\\www");
+    if (!ret) {
+        // The specified base directory doesn't exist...
+    }
+
+    svr.set_logger([](const auto& req, const auto& res) {
+        LOG(INFO) << "[" << req.method << "] " << req.path << " => " << res.status << endl;
+    });
+
+    svr.Post("/register", [](const Request& req, Response& res) {
+        if (req.has_header("Content-Length")) {
+            auto val = req.get_header_value("Content-Length");
+        }
+
+        rapidjson::Document d;
+        d.Parse(req.body.c_str());
+        assert(d.IsObject());
+
+        LOG(INFO) << "Name: " << d["username"].GetString() << ", gender: " << d["gender"].GetString() 
+            << ", age: " << d["age"].GetInt() << ", password: " << d["password"].GetString() << ", email: " << d["email"].GetString() << std::endl;
+
+        int new_uid = db_add_user(d["username"].GetString(), d["gender"].GetString(), d["age"].GetInt(), d["email"].GetString(), d["password"].GetString());
+        if (new_uid > 0) {
+            rapidjson::Document r;
+            r.SetObject();
+            r.AddMember("code", 0, r.GetAllocator());
+            r.AddMember("msg", "registered!", r.GetAllocator());
+            r.AddMember("uid", new_uid, r.GetAllocator());
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            r.Accept(writer);
+
+            std::string jsonStr = buffer.GetString();
+            res.set_content(jsonStr, "application/json");
+        }
+        else
+            res.set_content("{\"code\":-1,\"msg\":\"failed to register\"}", "application/json");
+    });
+
+    svr.listen("localhost", 12345);
+}
+
+int db_add_user(const char* username, const char* gender, int age, const char *email, const char* password)
+{
+    // write db insert
+    SQLite::Database db("chat.db3", SQLite::OPEN_READWRITE);
+
+    SQLite::Statement query(db, "INSERT INTO user (name, gender, age, email, password, created_at) VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))");
+    query.bind(1, username);
+    query.bind(2, strcmp(gender, "male") == 0 ? 0 : 1);
+    query.bind(3, age);
+    query.bind(4, email);
+    query.bind(5, password);
+    int nb = query.exec();
+
+    SQLite::Statement queryId(db, "SELECT last_insert_rowid();)");
+    if (queryId.executeStep()) {
+        return 600000 + queryId.getColumn(0).getInt();
+    }
+    
+    return -1;
+}
+
 /**
  * @brief Main function to create a server, accept client connections, and start
  * the chat application.
@@ -327,9 +401,12 @@ int main() {
       // Open a database file
       SQLite::Database    db("chat.db3", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
 
+      // 0-male, 1-female
       int nb = db.exec("CREATE TABLE IF NOT EXISTS user( \
           id INTEGER PRIMARY KEY AUTOINCREMENT,\
           name TEXT NOT NULL,\
+          gender INTEGER DEFAULT 0,\
+          age INTEGER NOT NULL,\
           email TEXT UNIQUE,\
           password TEXT NOT NULL,\
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP\
@@ -337,39 +414,48 @@ int main() {
       std::cout << "create table: " << nb << std::endl;
 
 #ifdef INSERT_DATA
-      nb = db.exec("INSERT INTO user (name, email, password, created_at) VALUES (\"aa01\", \"aa01@sohu.com\", \"123456\", datetime('now', 'localtime'))");
+      nb = db.exec("INSERT INTO user (name, gender, age, email, password, created_at) VALUES (\"aa01\", 0, 23, \"aa01@sohu.com\", \"123456\", datetime('now', 'localtime'))");
       std::cout << "insert table: " << nb << std::endl;
 
-      nb = db.exec("INSERT INTO user (name, email, password, created_at) VALUES (\"aa02\", \"aa02@sohu.com\", \"123456\", datetime('now', 'localtime'))");
+      nb = db.exec("INSERT INTO user (name, gender, age, email, password, created_at) VALUES (\"aa02\", 0, 34, \"aa02@sohu.com\", \"123456\", datetime('now', 'localtime'))");
       std::cout << "insert table: " << nb << std::endl;
 
-      nb = db.exec("INSERT INTO user (name, email, password, created_at) VALUES (\"bb01\", \"bb01@sohu.com\", \"123456\", datetime('now', 'localtime'))");
+      nb = db.exec("INSERT INTO user (name, gender, age, email, password, created_at) VALUES (\"bb01\", 1, 46, \"bb01@sohu.com\", \"123456\", datetime('now', 'localtime'))");
       std::cout << "insert table: " << nb << std::endl;
 #endif
 
+#ifdef CONDITION_SEARCH
       // Compile a SQL query, containing one parameter (index 1)
       SQLite::Statement query(db, "SELECT * FROM user WHERE name LIKE ?");
 
       // Bind the integer value 6 to the first parameter of the SQL query
       query.bind(1, "%aa%");
+#else
+      SQLite::Statement query(db, "SELECT * FROM user");
+#endif
 
       // Loop to execute the query step by step, to get rows of result
       while (query.executeStep())
       {
           // Demonstrate how to get some typed column value
-          int         id = query.getColumn(0);
+          int         id = 600000 + (int)query.getColumn(0);
           const char* username = query.getColumn(1);
-          const char* email = query.getColumn(2);
-          const char* passwd = query.getColumn(3);
-          const char* created_date = query.getColumn(4);
+          int gender = query.getColumn(2);
+          int age = query.getColumn(3);
+          const char* email = query.getColumn(4);
+          const char* passwd = query.getColumn(5);
+          const char* created_date = query.getColumn(6);
 
-          std::cout << "id: #" << id << ", " << username << ", email: " << email << ", passwd: " << passwd << ", created at: " << created_date << std::endl;
+          std::cout << "id: #" << id << ", " << username << ", gender: " << (gender == 0 ? "Male" : "Female") << ", age: " << age << ", email: " << email << ", passwd: " << passwd << ", created at: " << created_date << std::endl;
       }
   }
   catch (std::exception& e)
   {
       std::cout << "exception: " << e.what() << std::endl;
   }
+
+  std::thread t1(http_server);
+  t1.detach();
 
   WSADATA WSAData;
   SOCKET server, client;

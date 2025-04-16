@@ -19,3 +19,6 @@ https://github.com/badaix/aixlog
 
 # sqlite
 https://github.com/SRombauts/SQLiteCpp
+
+# httplib
+https://github.com/yhirose/cpp-httplib

@@ -6,6 +6,7 @@
 #include <thread>
 #include <vector>
 #include <winsock2.h>
+#include <SQLiteCpp/SQLiteCpp.h>
 #include "aixlog.hpp"
 
 using namespace std;
@@ -320,6 +321,55 @@ int main() {
   auto sink_file = make_shared<AixLog::SinkFile>(AixLog::Severity::info, "server.log");
   AixLog::Log::init({ sink_cout, sink_file });
   LOG(INFO) << "Hello, World!\n";
+
+  try
+  {
+      // Open a database file
+      SQLite::Database    db("chat.db3", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+
+      int nb = db.exec("CREATE TABLE IF NOT EXISTS user( \
+          id INTEGER PRIMARY KEY AUTOINCREMENT,\
+          name TEXT NOT NULL,\
+          email TEXT UNIQUE,\
+          password TEXT NOT NULL,\
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP\
+      )");
+      std::cout << "create table: " << nb << std::endl;
+
+#ifdef INSERT_DATA
+      nb = db.exec("INSERT INTO user (name, email, password, created_at) VALUES (\"aa01\", \"aa01@sohu.com\", \"123456\", datetime('now', 'localtime'))");
+      std::cout << "insert table: " << nb << std::endl;
+
+      nb = db.exec("INSERT INTO user (name, email, password, created_at) VALUES (\"aa02\", \"aa02@sohu.com\", \"123456\", datetime('now', 'localtime'))");
+      std::cout << "insert table: " << nb << std::endl;
+
+      nb = db.exec("INSERT INTO user (name, email, password, created_at) VALUES (\"bb01\", \"bb01@sohu.com\", \"123456\", datetime('now', 'localtime'))");
+      std::cout << "insert table: " << nb << std::endl;
+#endif
+
+      // Compile a SQL query, containing one parameter (index 1)
+      SQLite::Statement query(db, "SELECT * FROM user WHERE name LIKE ?");
+
+      // Bind the integer value 6 to the first parameter of the SQL query
+      query.bind(1, "%aa%");
+
+      // Loop to execute the query step by step, to get rows of result
+      while (query.executeStep())
+      {
+          // Demonstrate how to get some typed column value
+          int         id = query.getColumn(0);
+          const char* username = query.getColumn(1);
+          const char* email = query.getColumn(2);
+          const char* passwd = query.getColumn(3);
+          const char* created_date = query.getColumn(4);
+
+          std::cout << "id: #" << id << ", " << username << ", email: " << email << ", passwd: " << passwd << ", created at: " << created_date << std::endl;
+      }
+  }
+  catch (std::exception& e)
+  {
+      std::cout << "exception: " << e.what() << std::endl;
+  }
 
   WSADATA WSAData;
   SOCKET server, client;

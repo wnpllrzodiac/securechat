@@ -206,7 +206,7 @@ void clientReceive(MainWnd* ins) {
                     memcpy(name, data + pos + 8, name_size);
                     cout << "Client: #" << uid << ", " << name << endl;
 
-                    if (ins->getNickName() != name)
+                    if (ins->getUid() != uid)
                         ins->addUser(uid, name);
 
                     pos += (8 + name_size);

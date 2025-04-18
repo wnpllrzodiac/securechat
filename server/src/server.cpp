@@ -263,7 +263,7 @@ void serverSendUserList(SOCKET client)
     int offset = 0;
     for (int i = 0; i < userList.size(); i++) {
         ClientInfo info = userList[i];
-        int id = info.id;
+        int id = info.id + 600000;
         std::string username = info.username.c_str();
         int len = username.length();
 
@@ -419,6 +419,17 @@ ClientInfo db_query_user_password(int uid)
     return info;
 }
 
+void db_add_log(int level, const char* msg)
+{
+    // write db insert
+    SQLite::Database db("chat.db3", SQLite::OPEN_READWRITE);
+
+    SQLite::Statement query(db, "INSERT INTO log (level, message, added_at) VALUES (?, ?, datetime('now', 'localtime'))");
+    query.bind(1, level);
+    query.bind(2, msg);
+    int nb = query.exec();
+}
+
 int db_add_user(const char* username, const char* gender, int age, const char *email, const char* password)
 {
     // write db insert
@@ -449,11 +460,6 @@ int main() {
   if (SetConsoleCtrlHandler((PHANDLER_ROUTINE)console_handler, TRUE) == FALSE)
       return -1;
 
-  auto sink_cout = make_shared<AixLog::SinkCout>(AixLog::Severity::info);
-  auto sink_file = make_shared<AixLog::SinkFile>(AixLog::Severity::info, "server.log");
-  AixLog::Log::init({ sink_cout, sink_file });
-  LOG(INFO) << "Hello, World!\n";
-
   try
   {
       // Open a database file
@@ -469,7 +475,16 @@ int main() {
           password TEXT NOT NULL,\
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP\
       )");
-      std::cout << "create table: " << nb << std::endl;
+      std::cout << "create table user: " << nb << std::endl;
+
+      // log level: 2-info, 4-warning, 5-error
+      nb = db.exec("CREATE TABLE IF NOT EXISTS log( \
+          id INTEGER PRIMARY KEY AUTOINCREMENT,\
+          level INTEGER NOT NULL,\
+          message TEXT NOT NULL,\
+          added_at DATETIME DEFAULT CURRENT_TIMESTAMP\
+      )");
+      std::cout << "create table log: " << nb << std::endl;
 
 #ifdef INSERT_DATA
       nb = db.exec("INSERT INTO user (name, gender, age, email, password, created_at) VALUES (\"aa01\", 0, 23, \"aa01@sohu.com\", \"123456\", datetime('now', 'localtime'))");
@@ -511,6 +526,17 @@ int main() {
   {
       std::cout << "exception: " << e.what() << std::endl;
   }
+
+  auto sink_cout = make_shared<AixLog::SinkCout>(AixLog::Severity::info);
+  auto sink_file = make_shared<AixLog::SinkFile>(AixLog::Severity::info, "server.log");
+  auto sink_func = make_shared<AixLog::SinkCallback>(AixLog::Severity::info,
+      [](const AixLog::Metadata& metadata, const std::string& message)
+      {
+          db_add_log((int)metadata.severity, message.c_str());
+      }
+  );
+  AixLog::Log::init({ sink_cout, sink_file, sink_func });
+  LOG(INFO) << "Hello, World!\n";
 
   std::thread t1(http_server);
   t1.detach();

@@ -129,8 +129,9 @@ void clientReceive(MainWnd* ins) {
                 return;
             }
 
+            offset += readed;
+
             if (readed < 13) {
-                offset += readed;
                 continue;
             }
         }
@@ -140,7 +141,6 @@ void clientReceive(MainWnd* ins) {
         int msg_to = *(int*)(buffer + 5);
         int payload_len = *(int*)(buffer + 9);
 
-        offset += readed;
         if (offset < 13 + payload_len) {
             // not enough data
             curr_payload_len = payload_len;
@@ -264,46 +264,6 @@ void clientSend(MainWnd * ins) {
     if (::send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
         cout << "send failed with error: " << WSAGetLastError() << endl;
         return;
-    }
-
-    return;
-
-    int to_uid = -1;
-    while (true) {
-        fgets(msg, 4096, stdin);
-        if (strstr(msg, "connect") == msg) {
-            sscanf(msg, "connect %d", &to_uid);
-            cout << "set to_user to: " << to_uid << endl;
-            continue;
-        }
-
-        if (to_uid == -1) {
-            cout << "Please connect to a user first" << endl;
-            continue;
-        }
-
-        encrypt_AES(msg, strlen(msg));
-
-        memset(buffer, 0, 4096);
-        buffer[0] = MESSAGE_TYPE_MESSAGE;
-        // fix buffer[1] to buffer[4] with the length of the username
-        int size = strlen(msg);
-        int uid = ins->getUid();
-        memcpy(buffer + 1, &uid, 4); // from user id
-        memcpy(buffer + 5, &to_uid, 4); // to user id
-        memcpy(buffer + 9, &size, 4);
-        memcpy(buffer + 13, msg, strlen(msg));
-        int msg_len = 13 + strlen(msg);
-
-        cout << "to send msg type: " << MESSAGE_TYPE_MESSAGE << ", msg_len: " << msg_len << endl;
-        if (::send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
-            cout << "send failed with error: " << WSAGetLastError() << endl;
-            return;
-        }
-        if (strcmp(buffer, "exit") == 0) {
-            cout << "Thank you for using the application" << endl;
-            break;
-        }
     }
 }
 

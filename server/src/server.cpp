@@ -122,14 +122,19 @@ void serverReceive(SOCKET client) {
             // 4 bytes uid, password
         {
             memcpy(&uid, buffer + 13, 4);
-            LOG(INFO) << "Client login() uid: " << uid;
+            LOG(INFO) << "Client login() uid: " << uid << endl;
 
             char password[64] = { 0 };
             memcpy(password, buffer + 13 + 4, payload_len - 4);
-            LOG(INFO) << "Client login() password: " << password;
+            LOG(INFO) << "Client login() password: " << password << endl;
 
             // lookup password
-            ClientInfo info = db_query_user_password(uid - 600000);
+
+            // convert uid to db stored index
+            uid -= 600000;
+
+            // lookup password
+            ClientInfo info = db_query_user_password(uid);
 
             if (info.valid != -1 && info.password == password) {
                 info.client = client;
@@ -392,15 +397,18 @@ ClientInfo db_query_user_password(int uid)
     ClientInfo info;
 
     try {
-        SQLite::Database db("chat.db3", SQLite::OPEN_READONLY);
+        SQLite::Database db("chat.db3");
 
         SQLite::Statement query(db, "SELECT name,password FROM user WHERE id = ?");
         query.bind(1, uid);
 
         if (query.executeStep()) {
             info.valid = 1;
-            info.username = query.getColumn(0).getString();
-            info.password = query.getColumn(1).getString();
+            const char* name = query.getColumn(0);
+            const char* password = query.getColumn(1);
+            info.id = uid;
+            info.username = name;
+            info.password = password;
         }
     }
     catch (std::exception& e)

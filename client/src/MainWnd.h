@@ -31,10 +31,12 @@ public:
 private:
     int connectToServer();
     void sendData();
+public:
+    void setUserName(const char* name);
+    void sendGetList(SOCKET server);
 private:
     SOCKET      m_server;
     QTextEdit*  m_logTextEdit;
-    int         m_uid;
     QString     m_nickname;
     QString     m_password;
     int         m_uid = -1;

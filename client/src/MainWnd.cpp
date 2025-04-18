@@ -151,12 +151,23 @@ void clientReceive(MainWnd* ins) {
         std::cout << "msg type: " << msg_type << ", msg_len: " << payload_len << ", from: " << msg_from << ", to: " << msg_to << std::endl;
 
         switch (msg_type) {
-        case MESSAGE_TYPE_LOGIN:
-            cout << "Login message received" << endl;
-            int uid;
-            memcpy(&uid, buffer + 13, 4);
-            cout << "Your user id is: " << uid << endl;
-            ins->setUid(uid);
+        case MESSAGE_TYPE_LOGINRESULT:
+            cout << "Login result message received" << endl;
+
+            {
+                // 4 bytes result, message
+                int result;
+                char message[256] = { 0 };
+                memcpy(&result, buffer + 13, 4);
+                memcpy(message, buffer + 13 + 4, payload_len - 4);
+
+                if (result == 0) {
+                    ins->setUserName(message);
+
+                    ins->sendGetList(server);
+                }
+            }
+            
             break;
         case MESSAGE_TYPE_JOINED:
         case MESSAGE_TYPE_LEAVED:
@@ -229,41 +240,31 @@ void clientSend(MainWnd * ins) {
     SOCKET server = ins->getServerSocket();
 
     char buffer[4096] = { 0 };
-    char username[64] = { 0 };
+    char password[64] = { 0 };
     char msg[4096] = { 0 };
 
-    cout << readme(ins->getNickName().toStdString().c_str());
+    strcpy(password, ins->getPassword().toStdString().c_str());
 
-    strcpy(username, ins->getNickName().toStdString().c_str());
-    encrypt_AES(username, strlen(username));
+    int uid = ins->getUid();
 
     buffer[0] = MESSAGE_TYPE_LOGIN;
     int invalid_uid = -1;
     memcpy(buffer + 1, &invalid_uid, 4);
     memcpy(buffer + 5, &invalid_uid, 4);
     // fix buffer[1] to buffer[4] with the length of the username
-    int size = strlen(username);
-    memcpy(buffer + 9, &size, 4);
-    memcpy(buffer + 13, username, size);
-    int msg_len = 13 + size;
-    cout << "to send msg type: " << MESSAGE_TYPE_USERNAME << ", msg_len: " << msg_len << endl;
+
+    // 4 bytes uid, password
+    int payload_size = 4 + strlen(password);
+    memcpy(buffer + 9, &payload_size, 4);
+    memcpy(buffer + 13, &uid, 4);
+    memcpy(buffer + 13 + 4, password, strlen(password));
+    int msg_len = 13 + payload_size;
+    cout << "to send msg type: " << MESSAGE_TYPE_LOGIN << ", msg_len: " << msg_len << endl;
 
     if (::send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
         cout << "send failed with error: " << WSAGetLastError() << endl;
         return;
     }
-
-    buffer[0] = MESSAGE_TYPE_GETLIST;
-    size = 0;
-    memcpy(buffer + 9, &size, 4);
-    msg_len = 13; // no payload
-    cout << "to send msg type: " << MESSAGE_TYPE_GETLIST << ", msg_len: " << msg_len << endl;
-    if (::send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
-        cout << "send failed with error: " << WSAGetLastError() << endl;
-        return;
-    }
-    
-    cout << "MESSAGE_TYPE_GETLIST sent" << endl;
 
     return;
 
@@ -314,8 +315,8 @@ MainWnd::MainWnd(QWidget* parent)
 	setWindowTitle("Chat APP");
 
     srand(time(NULL));
-    int index = rand() % (sizeof(name_lists) / sizeof(char *));
-    ui.lineEditNickName->setText(name_lists[index]);
+    //int index = rand() % (sizeof(name_lists) / sizeof(char *));
+    //ui.lineEditNickName->setText(name_lists[index]);
 
     QScrollArea* scrollArea = ui.scrollAreaHistory;
     m_logTextEdit = new QTextEdit();
@@ -343,6 +344,28 @@ MainWnd::~MainWnd()
     closesocket(m_server);
 
     WSACleanup();
+}
+
+void MainWnd::setUserName(const char* name)
+{
+    ui.label_UserName->setText(name);
+}
+
+void MainWnd::sendGetList(SOCKET server)
+{
+    char buffer[4096] = { 0 };
+
+    buffer[0] = MESSAGE_TYPE_GETLIST;
+    int size = 0;
+    memcpy(buffer + 9, &size, 4);
+    int msg_len = 13; // no payload
+    cout << "to send msg type: " << MESSAGE_TYPE_GETLIST << ", msg_len: " << msg_len << endl;
+    if (::send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
+        cout << "send failed with error: " << WSAGetLastError() << endl;
+        return;
+    }
+
+    cout << "MESSAGE_TYPE_GETLIST sent" << endl;
 }
 
 void MainWnd::sendData()
@@ -411,7 +434,7 @@ void MainWnd::clearUsers()
 
 int MainWnd::connectToServer()
 {
-    m_uid = ui.lineEditNickName->text().toInt();
+    m_uid = ui.lineEditUID->text().toInt();
     m_password = ui.lineEditPassword->text();
     
     SOCKADDR_IN addr;

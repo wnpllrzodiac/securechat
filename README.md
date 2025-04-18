@@ -11,7 +11,7 @@ SecureChat allows users to communicate through a chat with guaranteed data prote
 # Exchanging secret messages ✉️
 
 # Build
-1. `cmake -B build__ -S . -DOPENSSL_ROOT_DIR=c:\OpenSSL-Win64 -DCMAKE_PREFIX_PATH=C:\Qt\6.8.3\msvc2022_64;D:\git\vcpkg\installed\x64-windows --fresh`
+1. `cmake -B build__ -S . -DCMAKE_PREFIX_PATH=C:\Qt\6.8.3\msvc2022_64;D:\download\code\vcpkg\installed\x64-windows --fresh`
 2. `cmake --build build__ --config Release`
 
 # log
@@ -22,3 +22,6 @@ https://github.com/SRombauts/SQLiteCpp
 
 # httplib
 https://github.com/yhirose/cpp-httplib
+
+# vcpkg install dependencies
+`vcpkg install OpenSSL SQLiteCpp rapidjson`

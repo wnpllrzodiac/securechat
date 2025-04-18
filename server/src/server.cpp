@@ -17,9 +17,15 @@ using namespace std;
 using namespace httplib;
 
 struct ClientInfo {
+    int         valid;
     int         id;
     std::string username;
+    std::string password;
     SOCKET      client;
+
+    ClientInfo():valid(-1) {
+
+    }
 };
 
 std::vector<ClientInfo> userList;
@@ -46,10 +52,11 @@ n bytes: message
 void serverSendUserList(SOCKET client);
 void serverSendJoinedMessage(int uid, const char* username);
 void serverSendLeavedMessage(int uid);
-void serverSendLoginMessage(SOCKET client, int uid);
+void serverSendLoginResultMessage(SOCKET client, int success, const char* msg);
 void serverForwardMessage(SOCKET socket, int from, int to, char* encrypted_message, int len);
 
 int db_add_user(const char* username, const char* gender, int age, const char* email, const char* password);
+ClientInfo db_query_user_password(int uid);
 
 /**
  * @brief Function to receive data from the client, decrypt it using AES-128,
@@ -111,16 +118,32 @@ void serverReceive(SOCKET client) {
 
         int uid = -1;
         switch (msg_type) {
-        case MESSAGE_TYPE_USERNAME:
-            memcpy(decrypted, buffer + 13, payload_len);
-            decrypt_AES(decrypted, payload_len);
-            uid = (int)userList.size();
-            userList.push_back({ uid, std::string(decrypted), client});
-            LOG(INFO) << "Client #" << uid << ": " << decrypted << " added to list\n";
+        case MESSAGE_TYPE_LOGIN:
+            // 4 bytes uid, password
+        {
+            memcpy(&uid, buffer + 13, 4);
+            LOG(INFO) << "Client login() uid: " << uid;
 
-            serverSendLoginMessage(client, uid);
+            char password[64] = { 0 };
+            memcpy(password, buffer + 13 + 4, payload_len - 4);
+            LOG(INFO) << "Client login() password: " << password;
 
-            serverSendJoinedMessage(uid, decrypted);
+            // lookup password
+            ClientInfo info = db_query_user_password(uid - 600000);
+
+            if (info.valid != -1 && info.password == password) {
+                info.client = client;
+                userList.push_back(info);
+                LOG(INFO) << "Client #" << uid << " added to list\n";
+
+                serverSendLoginResultMessage(client, 0, info.username.c_str());
+
+                serverSendJoinedMessage(uid, info.username.c_str());
+            }
+
+            serverSendLoginResultMessage(client, -1, "failed to login");
+        }
+           
             break;
         case MESSAGE_TYPE_MESSAGE:
             memcpy(decrypted, buffer + 13, payload_len);
@@ -260,17 +283,20 @@ void serverSendUserList(SOCKET client)
  * send it to the client.
  * @param {SOCKET} client The client socket to send data to.
  */
-void serverSendLoginMessage(SOCKET client, int uid) {
+void serverSendLoginResultMessage(SOCKET client, int success, const char* msg) {
     char buffer[1024] = {0};
-    buffer[0] = MESSAGE_TYPE_LOGIN;
+    buffer[0] = MESSAGE_TYPE_LOGINRESULT;
     memset(buffer + 1, 0, 4);
     memset(buffer + 5, 0, 4);
-    int size = 4;
-    memcpy(buffer + 9, &size, 4);
+    int payload_size = 4 + strlen(msg);
+    memcpy(buffer + 9, &payload_size, 4);
     
-    memcpy(buffer + 13, &uid, 4);
+    // payload
+    // 4 bytes result, message
+    memcpy(buffer + 13, &success, 4);
+    memcpy(buffer + 13 + 4, msg, strlen(msg));
 
-    if (send(client, buffer, 13 + 4, 0) == SOCKET_ERROR) {
+    if (send(client, buffer, 13 + payload_size, 0) == SOCKET_ERROR) {
         LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;
     }
 }
@@ -319,7 +345,7 @@ void http_server()
 {
     Server svr;
 
-    auto ret = svr.set_mount_point("/", "D:\\git\\securechat\\www");
+    auto ret = svr.set_mount_point("/", "D:\\download\\code\\securechat\\www");
     if (!ret) {
         // The specified base directory doesn't exist...
     }
@@ -361,6 +387,30 @@ void http_server()
     svr.listen("localhost", 12345);
 }
 
+ClientInfo db_query_user_password(int uid)
+{
+    ClientInfo info;
+
+    try {
+        SQLite::Database db("chat.db3", SQLite::OPEN_READONLY);
+
+        SQLite::Statement query(db, "SELECT name,password FROM user WHERE id = ?");
+        query.bind(1, uid);
+
+        if (query.executeStep()) {
+            info.valid = 1;
+            info.username = query.getColumn(0).getString();
+            info.password = query.getColumn(1).getString();
+        }
+    }
+    catch (std::exception& e)
+    {
+        std::cout << "exception: " << e.what() << std::endl;
+    }
+
+    return info;
+}
+
 int db_add_user(const char* username, const char* gender, int age, const char *email, const char* password)
 {
     // write db insert
@@ -374,7 +424,7 @@ int db_add_user(const char* username, const char* gender, int age, const char *e
     query.bind(5, password);
     int nb = query.exec();
 
-    SQLite::Statement queryId(db, "SELECT last_insert_rowid();)");
+    SQLite::Statement queryId(db, "SELECT last_insert_rowid();");
     if (queryId.executeStep()) {
         return 600000 + queryId.getColumn(0).getInt();
     }

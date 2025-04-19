@@ -11,6 +11,11 @@ namespace Ui {
     class MainWnd;
 }
 
+struct UserInfo {
+    int uid;
+    std::string name;
+};
+
 class MainWnd : public QMainWindow {
     Q_OBJECT
 private:
@@ -28,6 +33,11 @@ public:
     void addUser(int uid, const char* username);
     void removeUser(int uid);
     void appendMessageLog(int from, int to, const char* msg);
+
+signals:
+    void userList(std::vector<UserInfo>);
+private slots:
+    void onUserList(std::vector<UserInfo>);
 private:
     int connectToServer();
     void sendData();

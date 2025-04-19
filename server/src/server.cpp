@@ -16,6 +16,11 @@
 using namespace std;
 using namespace httplib;
 
+// uid
+//server db(1,2,...) <-> send/recv message(600001,60002,...) <-> client(600001,60002,...)
+
+#define UID_BASE 600000
+
 struct ClientInfo {
     int         valid;
     int         id;
@@ -23,7 +28,7 @@ struct ClientInfo {
     std::string password;
     SOCKET      client;
 
-    ClientInfo():valid(-1) {
+    ClientInfo():valid(-1), id(-1), client(-1) {
 
     }
 };
@@ -131,7 +136,7 @@ void serverReceive(SOCKET client) {
             // lookup password
 
             // convert uid to db stored index
-            uid -= 600000;
+            uid -= UID_BASE;
 
             // lookup password
             ClientInfo info = db_query_user_password(uid);
@@ -263,7 +268,7 @@ void serverSendUserList(SOCKET client)
     int offset = 0;
     for (int i = 0; i < userList.size(); i++) {
         ClientInfo info = userList[i];
-        int id = info.id + 600000;
+        int id = info.id + UID_BASE;
         std::string username = info.username.c_str();
         int len = username.length();
 
@@ -445,7 +450,7 @@ int db_add_user(const char* username, const char* gender, int age, const char *e
 
     SQLite::Statement queryId(db, "SELECT last_insert_rowid();");
     if (queryId.executeStep()) {
-        return 600000 + queryId.getColumn(0).getInt();
+        return UID_BASE + queryId.getColumn(0).getInt();
     }
     
     return -1;
@@ -511,7 +516,7 @@ int main() {
       while (query.executeStep())
       {
           // Demonstrate how to get some typed column value
-          int         id = 600000 + (int)query.getColumn(0);
+          int         id = UID_BASE + (int)query.getColumn(0);
           const char* username = query.getColumn(1);
           int gender = query.getColumn(2);
           int age = query.getColumn(3);

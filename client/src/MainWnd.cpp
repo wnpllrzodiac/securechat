@@ -8,70 +8,6 @@
 
 using namespace std;
 
-const char* name_lists[] = {
-    "Ash",
-    "Skye",
-    "Nana"
-    "Clover",
-    "Kevin",
-    "Muriel",
-    "Buzz",
-    "Baron",
-    "August",
-    "Mimi",
-    "Muse",
-    "Jaxon",
-    "Titan",
-    "Queenie",
-    "Roderick",
-    "Maxwell",
-    "Ralap",
-    "Luna",
-    "Michelle",
-    "Cosima",
-    "Sandy",
-    "Eric",
-    "Amari",
-    "Esme",
-    "Kennedy",
-    "Ah",
-    "Herbert",
-    "Quinn",
-    "Philip",
-    "Theodore",
-    "William",
-    "Alan",
-    "Amaya",
-    "Erika",
-    "Ciel",
-    "Cassiel",
-    "Jason",
-    "Darren",
-    "Miya",
-    "Marshall",
-    "Rhys",
-    "Demi",
-    "Regina",
-    "Cassiopeia",
-    "Jo",
-    "Derica ",
-    "Julian ",
-    "Kira",
-    "Geri",
-    "Frederica",
-    "Frederic",
-    "Cyan",
-    "Gilbert",
-    "Angel",
-    "tticus",
-    "Breaker",
-    "Kimi",
-    "Dione",
-    "airica",
-    "Gabrielle",
-    "Elijah",
-};
-
 // COLORS
 #define CYN "\x1B[36m"
 #define MAG "\x1B[35m"
@@ -180,10 +116,12 @@ void clientReceive(MainWnd* ins) {
                 memcpy(name, data + 8, name_size);
                 cout << "Client: #" << uid << ", " << name << (msg_type == MESSAGE_TYPE_JOINED ? " joined" : " leaved") << endl;
 
-                if (msg_type == MESSAGE_TYPE_JOINED)
+                if (msg_type == MESSAGE_TYPE_JOINED) {
                     ins->addUser(uid, name);
-                else
+                }
+                else {
                     ins->removeUser(uid);
+                }
             }
             break;
         case MESSAGE_TYPE_MESSAGE:
@@ -212,7 +150,6 @@ void clientReceive(MainWnd* ins) {
                     pos += (8 + name_size);
                 }
             }
-            
 
 			break;
         default:
@@ -230,6 +167,11 @@ void clientReceive(MainWnd* ins) {
             offset = 0;
         }
     }
+}
+
+void MainWnd::onUserList(std::vector<UserInfo>)
+{
+
 }
 
 /**
@@ -291,10 +233,12 @@ MainWnd::MainWnd(QWidget* parent)
     WSADATA WSAData;
     WSAStartup(MAKEWORD(2, 2), &WSAData);
 
+    ui.pushButtonSend->setEnabled(false);
+
     QObject::connect(ui.pushButtonConnect, &QPushButton::clicked, this, &MainWnd::connectToServer);
     QObject::connect(ui.pushButtonSend, &QPushButton::clicked, this, &MainWnd::sendData);
     QObject::connect(ui.listWidgetClients, &QListWidget::itemClicked, this, [&](QListWidgetItem* item) {
-        m_to_uid = item->data(100).toInt();
+        m_to_uid = item->data(Qt::UserRole).toInt();
         cout << "m_to_uid set to: " << m_to_uid << endl;
     });
 }
@@ -308,7 +252,7 @@ MainWnd::~MainWnd()
 
 void MainWnd::setUserName(const char* name)
 {
-    ui.label_UserName->setText(name);
+    ui.label_UserName->setText(QString("My username is: %1").arg(name));
 }
 
 void MainWnd::sendGetList(SOCKET server)
@@ -366,13 +310,27 @@ void MainWnd::sendData()
 void MainWnd::addUser(int uid, const char* username)
 {
     QListWidgetItem* newItem = new QListWidgetItem(QString(username));
-    newItem->setData(100, uid);
+    newItem->setData(Qt::UserRole, uid);
     ui.listWidgetClients->addItem(newItem);
+
+    if (ui.listWidgetClients->count() > 1)
+        ui.pushButtonSend->setEnabled(true);
 }
 
 void MainWnd::removeUser(int uid)
 {
-
+    qDebug() << "removeUser(): " << uid;
+    for (int i = 0;i < ui.listWidgetClients->count();i++) {
+        QListWidgetItem* item = ui.listWidgetClients->item(i);
+        if (item->data(Qt::UserRole).toInt() == uid) {
+            qDebug() << "remove uid: " << uid << "from list";
+            ui.listWidgetClients->removeItemWidget(item);
+            break;
+        }
+    }
+    
+    if (ui.listWidgetClients->count() <= 1)
+        ui.pushButtonSend->setEnabled(false);
 }
 
 void MainWnd::appendMessageLog(int from, int to, const char* msg)

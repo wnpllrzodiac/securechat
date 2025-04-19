@@ -5,6 +5,7 @@
 #include <cstring>
 #include <iostream>
 #include <thread>
+#include <QMessageBox>
 
 using namespace std;
 
@@ -146,9 +147,13 @@ void WorkerThread::run() {
             break;
         case MESSAGE_TYPE_MESSAGE:
             {
-                decrypt_AES(buffer + 13, offset - 13);
-                cout << "#" << msg_from << " sent msg to " << msg_to << " :" << buffer + 13 << endl;
-                std::string msg = buffer + 13;
+                // 1 byte is_enc, bytes message
+                unsigned char is_enc = 0;
+                memcpy(&is_enc, buffer + 13, 1);
+                if (is_enc)
+                    decrypt_AES(buffer + 13 + 1, offset - 13 - 1);
+                cout << "#" << msg_from << " sent msg to " << msg_to << " :" << buffer + 13 + 1 << endl;
+                std::string msg = buffer + 13 + 1;
                 emit appendMessageLog(msg_from, msg_to, msg);
              }
             
@@ -290,7 +295,7 @@ MainWnd::MainWnd(QWidget* parent)
     ui.pushButtonSend->setEnabled(false);
 
     QObject::connect(ui.pushButtonConnect, &QPushButton::clicked, this, &MainWnd::connectToServer);
-    QObject::connect(ui.pushButtonSend, &QPushButton::clicked, this, &MainWnd::sendData);
+    QObject::connect(ui.pushButtonSend, &QPushButton::clicked, this, &MainWnd::sendMessage);
     QObject::connect(ui.listWidgetClients, &QListWidget::itemClicked, this, [&](QListWidgetItem* item) {
         m_to_uid = item->data(Qt::UserRole).toInt();
         cout << "m_to_uid set to: " << m_to_uid << endl;
@@ -316,41 +321,53 @@ QString MainWnd::getNameFromUID(int uid)
     return "";
 }
 
-void MainWnd::sendData()
+void MainWnd::sendMessage()
 {
     QString strMsg = ui.textEditMessage->toPlainText();
     if (strMsg.isEmpty()) {
 		return;
 	}
 
-	ui.textEditMessage->clear();
-
 	m_logTextEdit->append("You sent: " + strMsg);
 
+    unsigned char is_enc = 1;
+
     char msg[256] = { 0 };
-    strcpy(msg, strMsg.toStdString().c_str());
+
+    QByteArray byteArray = strMsg.toLocal8Bit();
+    const char* output = byteArray.constData();
+    printf("input msg: %s\n", output);
+
+    strcpy(msg, byteArray.constData());
     char encryped_msg[256] = { 0 };
     memcpy(encryped_msg, msg, 256);
-    encrypt_AES(encryped_msg, strlen(msg));
+    if (is_enc)
+        encrypt_AES(encryped_msg, strlen(msg));
 
     char buffer[4096] = { 0 };
 
     memset(buffer, 0, 4096);
+
     buffer[0] = MESSAGE_TYPE_MESSAGE;
     // fix buffer[1] to buffer[4] with the length of the username
-    int size = strlen(encryped_msg);
+    int size = 1 + strlen(encryped_msg);
     memcpy(buffer + 1, &m_uid, 4); // from user id
     memcpy(buffer + 5, &m_to_uid, 4); // to user id
     memcpy(buffer + 9, &size, 4);
-    memcpy(buffer + 13, encryped_msg, strlen(encryped_msg));
-    int msg_len = 13 + strlen(encryped_msg);
+
+    // 1 byte is_enc, bytes message
+    memcpy(buffer + 13, &is_enc, 1);
+    memcpy(buffer + 13 + 1, encryped_msg, strlen(encryped_msg));
+    int msg_len = 13 + 1 + strlen(encryped_msg);
     cout << "to send msg type: " << MESSAGE_TYPE_MESSAGE << ", msg_len: " << msg_len << ", plain msg: " << msg << endl;
 
     if (::send(m_server, buffer, msg_len, 0) == SOCKET_ERROR) {
         cout << "send failed with error: " << WSAGetLastError() << endl;
+        QMessageBox::warning(nullptr, "error", "failed to send message");
         return;
     }
 
+    ui.textEditMessage->clear();
 }
 
 void MainWnd::onSetUserName(const char* name)
@@ -365,7 +382,11 @@ void MainWnd::onAddUser(int uid, const char* username)
     ui.listWidgetClients->addItem(newItem);
     qDebug() << "onAddUser() add uid: " << uid << "to list";
 
+#ifdef _DEBUG
+    if (ui.listWidgetClients->count() > 0)
+#else
     if (ui.listWidgetClients->count() > 1)
+#endif
         ui.pushButtonSend->setEnabled(true);
 }
 
@@ -395,7 +416,8 @@ void MainWnd::onAppendMessageLog(int from, int to, std::string msg)
     if (from != -1 && !getNameFromUID(from).isEmpty())
         fromDesc = getNameFromUID(from);
 
-    QString str = QString("%1 say %2 to %3").arg(fromDesc).arg(msg.c_str()).arg(toDesc);
+    QString strMsg = QString::fromLocal8Bit(msg.c_str());
+    QString str = QString("%1 say %2 to %3").arg(fromDesc).arg(strMsg).arg(toDesc);
     m_logTextEdit->append(str);
 }
 

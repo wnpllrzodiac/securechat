@@ -58,7 +58,7 @@ void serverSendUserList(SOCKET client);
 void serverSendJoinedMessage(int uid, const char* username);
 void serverSendLeavedMessage(int uid);
 void serverSendLoginResultMessage(SOCKET client, int success, const char* msg);
-void serverForwardMessage(SOCKET socket, int from, int to, char* encrypted_message, int len);
+void serverForwardMessage(SOCKET socket, int from, int to, char* data, int data_len);
 
 int db_add_user(const char* username, const char* gender, int age, const char* email, const char* password);
 ClientInfo db_query_user_password(int uid);
@@ -122,6 +122,7 @@ void serverReceive(SOCKET client) {
         memset(decrypted, 0, MAX_BUFFER_SIZE);
 
         int uid = -1;
+        unsigned char is_enc = 0;
         switch (msg_type) {
         case MESSAGE_TYPE_LOGIN:
             // 4 bytes uid, password
@@ -152,12 +153,16 @@ void serverReceive(SOCKET client) {
            
             break;
         case MESSAGE_TYPE_MESSAGE:
-            memcpy(decrypted, buffer + 13, payload_len);
+            // 1 byte is_enc, bytes message
+            memcpy(&is_enc, buffer + 13, 1);
+            memcpy(decrypted, buffer + 13 + 1, payload_len - 1);
             LOG(INFO) << "Client msg(encrypted): " << decrypted << ", to: " << msg_to << "\n";
+            printf("is_enc: %d\n", is_enc);
 
             if (msg_to == -1) {
                 // broadcast
-                decrypt_AES(decrypted, payload_len);
+                if (is_enc)
+                    decrypt_AES(decrypted, payload_len - 1);
                 LOG(INFO) << "broadcast msg: " << decrypted << "\n";
 
                 for (ClientInfo info : userList) {
@@ -306,16 +311,15 @@ void serverSendLoginResultMessage(SOCKET client, int success, const char* msg) {
     }
 }
 
-void serverForwardMessage(SOCKET socket, int from, int to, char* encrypted_message, int len) {
+void serverForwardMessage(SOCKET socket, int from, int to, char* data, int data_len) {
     char buffer[1024] = { 0 };
     buffer[0] = MESSAGE_TYPE_MESSAGE;
     memcpy(buffer + 1, &from, 4);
     memcpy(buffer + 5, &to, 4);
-    memcpy(buffer + 9, &len, 4);
+    memcpy(buffer + 9, &data_len, 4);
+    memcpy(buffer + 13, data, data_len);
 
-    memcpy(buffer + 13, encrypted_message, len);
-
-    if (send(socket, buffer, 13 + len, 0) == SOCKET_ERROR) {
+    if (send(socket, buffer, 13 + data_len, 0) == SOCKET_ERROR) {
         LOG(ERROR) << "send failed with error " << WSAGetLastError() << endl;
     }
 

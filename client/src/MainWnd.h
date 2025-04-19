@@ -69,7 +69,7 @@ private slots:
 private:
     int connectToServer();
     QString getNameFromUID(int uid);
-    void sendData();
+    void sendMessage();
 private:
     SOCKET          m_server;
     QTextEdit*      m_logTextEdit;

@@ -304,6 +304,18 @@ MainWnd::~MainWnd()
     WSACleanup();
 }
 
+QString MainWnd::getNameFromUID(int uid)
+{
+    for (int i = 0;i < ui.listWidgetClients->count();i++) {
+        QListWidgetItem* item = ui.listWidgetClients->item(i);
+        if (item->data(Qt::UserRole).toInt() == uid) {
+            return item->text();
+        }
+    }
+
+    return "";
+}
+
 void MainWnd::sendData()
 {
     QString strMsg = ui.textEditMessage->toPlainText();
@@ -377,11 +389,13 @@ void MainWnd::onAppendMessageLog(int from, int to, std::string msg)
 {
     QString toDesc = "ALL";
     if (to != -1)
-        toDesc = QString("#%1").arg(to);
-    if (to == m_uid)
         toDesc = "Me";
 
-    QString str = QString("#%1 say %2 to %3").arg(from).arg(msg.c_str()).arg(toDesc);
+    QString fromDesc = QString("# %1").arg(from);
+    if (from != -1 && !getNameFromUID(from).isEmpty())
+        fromDesc = getNameFromUID(from);
+
+    QString str = QString("%1 say %2 to %3").arg(fromDesc).arg(msg.c_str()).arg(toDesc);
     m_logTextEdit->append(str);
 }
 

@@ -68,6 +68,7 @@ private slots:
 
 private:
     int connectToServer();
+    QString getNameFromUID(int uid);
     void sendData();
 private:
     SOCKET          m_server;

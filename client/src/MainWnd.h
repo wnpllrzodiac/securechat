@@ -34,7 +34,7 @@ signals:
     void clearUsers();
     void addUser(int uid, const char* name);
     void removeUser(int uid);
-    void appendMessageLog(int form, int to, const char* msg);
+    void appendMessageLog(int form, int to, std::string msg);
    
 private:
     SOCKET      m_socket;
@@ -64,7 +64,7 @@ private slots:
     void onClearUsers();
     void onAddUser(int uid, const char* username);
     void onRemoveUser(int uid);
-    void onAppendMessageLog(int from, int to, const char* msg);
+    void onAppendMessageLog(int from, int to, std::string msg);
 
 private:
     int connectToServer();

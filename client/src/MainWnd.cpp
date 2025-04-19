@@ -145,9 +145,13 @@ void WorkerThread::run() {
             }
             break;
         case MESSAGE_TYPE_MESSAGE:
-            decrypt_AES(buffer + 13, offset - 13);
-            cout << "#" << msg_from << " sent msg to " << msg_to << " :" << buffer + 13;
-            emit appendMessageLog(msg_from, msg_to, buffer + 13);
+            {
+                decrypt_AES(buffer + 13, offset - 13);
+                cout << "#" << msg_from << " sent msg to " << msg_to << " :" << buffer + 13 << endl;
+                std::string msg = buffer + 13;
+                emit appendMessageLog(msg_from, msg_to, msg);
+             }
+            
             break;
         case MESSAGE_TYPE_LIST:
             {
@@ -313,20 +317,22 @@ void MainWnd::sendData()
 
     char msg[256] = { 0 };
     strcpy(msg, strMsg.toStdString().c_str());
-    encrypt_AES(msg, strlen(msg));
+    char encryped_msg[256] = { 0 };
+    memcpy(encryped_msg, msg, 256);
+    encrypt_AES(encryped_msg, strlen(msg));
 
     char buffer[4096] = { 0 };
 
     memset(buffer, 0, 4096);
     buffer[0] = MESSAGE_TYPE_MESSAGE;
     // fix buffer[1] to buffer[4] with the length of the username
-    int size = strlen(msg);
+    int size = strlen(encryped_msg);
     memcpy(buffer + 1, &m_uid, 4); // from user id
     memcpy(buffer + 5, &m_to_uid, 4); // to user id
     memcpy(buffer + 9, &size, 4);
-    memcpy(buffer + 13, msg, strlen(msg));
-    int msg_len = 13 + strlen(msg);
-    cout << "to send msg type: " << MESSAGE_TYPE_MESSAGE << ", msg_len: " << msg_len << endl;
+    memcpy(buffer + 13, encryped_msg, strlen(encryped_msg));
+    int msg_len = 13 + strlen(encryped_msg);
+    cout << "to send msg type: " << MESSAGE_TYPE_MESSAGE << ", msg_len: " << msg_len << ", plain msg: " << msg << endl;
 
     if (::send(m_server, buffer, msg_len, 0) == SOCKET_ERROR) {
         cout << "send failed with error: " << WSAGetLastError() << endl;
@@ -345,6 +351,7 @@ void MainWnd::onAddUser(int uid, const char* username)
     QListWidgetItem* newItem = new QListWidgetItem(QString(username));
     newItem->setData(Qt::UserRole, uid);
     ui.listWidgetClients->addItem(newItem);
+    qDebug() << "onAddUser() add uid: " << uid << "to list";
 
     if (ui.listWidgetClients->count() > 1)
         ui.pushButtonSend->setEnabled(true);
@@ -356,8 +363,8 @@ void MainWnd::onRemoveUser(int uid)
     for (int i = 0;i < ui.listWidgetClients->count();i++) {
         QListWidgetItem* item = ui.listWidgetClients->item(i);
         if (item->data(Qt::UserRole).toInt() == uid) {
-            qDebug() << "remove uid: " << uid << "from list";
-            ui.listWidgetClients->removeItemWidget(item);
+            qDebug() << "onRemoveUser() remove uid: " << uid << "from list";
+            delete item;
             break;
         }
     }
@@ -366,7 +373,7 @@ void MainWnd::onRemoveUser(int uid)
         ui.pushButtonSend->setEnabled(false);
 }
 
-void MainWnd::onAppendMessageLog(int from, int to, const char* msg)
+void MainWnd::onAppendMessageLog(int from, int to, std::string msg)
 {
     QString toDesc = "ALL";
     if (to != -1)
@@ -374,7 +381,7 @@ void MainWnd::onAppendMessageLog(int from, int to, const char* msg)
     if (to == m_uid)
         toDesc = "Me";
 
-    QString str = QString("#%1 say %2 to %3").arg(from).arg(msg).arg(toDesc);
+    QString str = QString("#%1 say %2 to %3").arg(from).arg(msg.c_str()).arg(toDesc);
     m_logTextEdit->append(str);
 }
 

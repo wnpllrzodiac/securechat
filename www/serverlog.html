@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日志页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>日志页面</h1>
+    <div id="status" class="loading">加载中...</div>
+    <table id="logTable" style="display: none;">
+        <thead>
+            <tr>
+                <th>日志级别</th>
+                <th>日志内容</th>
+                <th>日志时间</th>
+                <th>项目</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- 表格数据将通过JavaScript动态插入 -->
+        </tbody>
+    </table>
+
+    <script>
+        // 定义从 getlog 接口获取日志数据的函数
+        async function fetchLogData() {
+            const statusDiv = document.getElementById('status');
+            const logTable = document.getElementById('logTable');
+            try {
+                // 调用 getlog 接口
+                const response = await fetch('/getlog'); // 替换为实际的 API URL
+                if (!response.ok) {
+                    throw new Error(`HTTP 错误: ${response.status}`);
+                }
+                const data = await response.json();
+
+                // 清空加载状态并显示表格
+                statusDiv.style.display = 'none';
+                logTable.style.display = 'table';
+
+                // 动态生成表格内容
+                const tbody = logTable.querySelector('tbody');
+                data.forEach(log => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${log.level}</td>
+                        <td>${log.message}</td>
+                        <td>${log.timestamp}</td>
+                        <td>${log.project}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                // 显示错误信息
+                statusDiv.className = 'error';
+                statusDiv.textContent = `加载日志失败: ${error.message}`;
+            }
+        }
+
+        // 页面加载时调用 fetchLogData 函数
+        window.onload = fetchLogData;
+    </script>
+</body>
+</html>

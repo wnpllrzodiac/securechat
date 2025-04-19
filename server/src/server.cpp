@@ -359,6 +359,58 @@ void http_server()
         LOG(INFO) << "[" << req.method << "] " << req.path << " => " << res.status << endl;
     });
 
+    svr.Get("/getlog", [](const Request& req, Response& res) {
+    /*
+    [
+        {
+            "level": "INFO",
+            "message": "系统启动成功",
+            "timestamp": "2025-04-19 06:30:00",
+            "project": "系统服务"
+        },
+        {
+            "level": "WARN",
+            "message": "内存使用率接近上限",
+            "timestamp": "2025-04-19 06:32:00",
+            "project": "性能监控"
+        }
+    ]
+    */
+        try {
+            rapidjson::Document r;
+            r.SetArray();
+            rapidjson::Document::AllocatorType& allocator = r.GetAllocator();
+
+            SQLite::Database db("chat.db3");
+
+            SQLite::Statement query(db, "SELECT level,message,added_at FROM log ORDER BY added_at");
+
+            while (query.executeStep()) {
+                int level = query.getColumn(0);
+                std::string msg = query.getColumn(1).getString();
+                std::string date = query.getColumn(2).getString();
+                rapidjson::Value member(rapidjson::kObjectType);
+                member.AddMember("level", level, allocator);
+                member.AddMember("message", rapidjson::Value(msg.c_str(), allocator).Move(), allocator);
+                member.AddMember("added_at", rapidjson::Value(date.c_str(), allocator).Move(), allocator);
+                r.PushBack(member, allocator);
+            }
+
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            r.Accept(writer);
+
+            std::string jsonStr = buffer.GetString();
+            res.set_content(jsonStr, "application/json");
+        }
+        catch (std::exception& e)
+        {
+            std::cout << "exception: " << e.what() << std::endl;
+        }
+
+        res.set_content("{\"code\":-1,\"msg\":\"error\"}", "application/json");
+        });
+
     svr.Post("/register", [](const Request& req, Response& res) {
         if (req.has_header("Content-Length")) {
             auto val = req.get_header_value("Content-Length");

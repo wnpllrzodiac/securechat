@@ -45,14 +45,34 @@ string readme(string username) {
  * @brief Function to receive data from the server and decrypt it using AES-128.
  * @param {SOCKEt} server The server socket to receive data from.
  */
-void clientReceive(MainWnd* ins) {
-    SOCKET server = ins->getServerSocket();
-
+void WorkerThread::run() {
     const int MAX_BUFFER_SIZE = 4096;
     char buffer[MAX_BUFFER_SIZE] = { 0 };
     int offset = 0;
     int readed = -1;
     int curr_payload_len = -1;
+
+    char msg[4096] = { 0 };
+
+    buffer[0] = MESSAGE_TYPE_LOGIN;
+    int invalid_uid = -1;
+    memcpy(buffer + 1, &invalid_uid, 4);
+    memcpy(buffer + 5, &invalid_uid, 4);
+    // fix buffer[1] to buffer[4] with the length of the username
+
+    // 4 bytes uid, password
+    int payload_size = 4 + m_password.length();
+    memcpy(buffer + 9, &payload_size, 4);
+    memcpy(buffer + 13, &m_uid, 4);
+    memcpy(buffer + 13 + 4, m_password.c_str(), m_password.length());
+    int msg_len = 13 + payload_size;
+    cout << "to send msg type: " << MESSAGE_TYPE_LOGIN << ", msg_len: " << msg_len << endl;
+
+    if (::send(m_socket, buffer, msg_len, 0) == SOCKET_ERROR) {
+        cout << "send failed with error: " << WSAGetLastError() << endl;
+        return;
+    }
+
     while (true) {
         if (offset < 13) {
             int toread = MAX_BUFFER_SIZE - offset;
@@ -60,7 +80,7 @@ void clientReceive(MainWnd* ins) {
                 toread = curr_payload_len - (offset - 13);
             }
 
-            if ((readed = recv(server, buffer + offset, toread, 0)) == SOCKET_ERROR) {
+            if ((readed = recv(m_socket, buffer + offset, toread, 0)) == SOCKET_ERROR) {
                 cout << "recv function failed with error " << WSAGetLastError() << endl;
                 return;
             }
@@ -98,9 +118,9 @@ void clientReceive(MainWnd* ins) {
                 memcpy(message, buffer + 13 + 4, payload_len - 4);
 
                 if (result == 0) {
-                    ins->setUserName(message);
+                    emit setUserName(message);
 
-                    ins->sendGetList(server);
+                    sendGetList();
                 }
             }
             
@@ -117,22 +137,26 @@ void clientReceive(MainWnd* ins) {
                 cout << "Client: #" << uid << ", " << name << (msg_type == MESSAGE_TYPE_JOINED ? " joined" : " leaved") << endl;
 
                 if (msg_type == MESSAGE_TYPE_JOINED) {
-                    ins->addUser(uid, name);
+                    emit addUser(uid, name);
                 }
                 else {
-                    ins->removeUser(uid);
+                    emit removeUser(uid);
                 }
             }
             break;
         case MESSAGE_TYPE_MESSAGE:
             decrypt_AES(buffer + 13, offset - 13);
             cout << "#" << msg_from << " sent msg to " << msg_to << " :" << buffer + 13;
-            ins->appendMessageLog(msg_from, msg_to, buffer + 13);
+            emit appendMessageLog(msg_from, msg_to, buffer + 13);
             break;
         case MESSAGE_TYPE_LIST:
             {
-                ins->clearUsers();
-                ins->addUser(-1, "all");
+                cout << "MESSAGE_TYPE_LIST" << endl;
+
+                emit clearUsers();
+                emit addUser(-1, "all");
+
+                std::vector<UserInfo> list;
 
                 char* data = buffer + 13;
                 // 4 bytes: id, 4 bytes: size, n bytes: username
@@ -142,13 +166,19 @@ void clientReceive(MainWnd* ins) {
                     int name_size = *(int*)(data + pos + 4);
                     char name[64] = { 0 };
                     memcpy(name, data + pos + 8, name_size);
-                    cout << "Client: #" << uid << ", " << name << endl;
+                    cout << "add Client: #" << uid << ", " << name << "to user list" << endl;
 
-                    if (ins->getUid() != uid)
-                        ins->addUser(uid, name);
+                    //if (ins->getUid() != uid)
+                     //   ins->addUser(uid, name);
+                    UserInfo info;
+                    info.uid = uid;
+                    info.name = name;
+                    list.push_back(info);
 
                     pos += (8 + name_size);
                 }
+
+                emit userList(list);
             }
 
 			break;
@@ -169,9 +199,29 @@ void clientReceive(MainWnd* ins) {
     }
 }
 
-void MainWnd::onUserList(std::vector<UserInfo>)
+void WorkerThread::sendGetList()
 {
+    char buffer[4096] = { 0 };
 
+    buffer[0] = MESSAGE_TYPE_GETLIST;
+    int size = 0;
+    memcpy(buffer + 9, &size, 4);
+    int msg_len = 13; // no payload
+    cout << "to send msg type: " << MESSAGE_TYPE_GETLIST << ", msg_len: " << msg_len << endl;
+    if (::send(m_socket, buffer, msg_len, 0) == SOCKET_ERROR) {
+        cout << "send failed with error: " << WSAGetLastError() << endl;
+        return;
+    }
+
+    cout << "MESSAGE_TYPE_GETLIST sent" << endl;
+}
+
+void MainWnd::onUserList(std::vector<UserInfo> list)
+{
+    for (auto info : list) {
+        if (info.uid != m_uid)
+            onAddUser(info.uid, info.name.c_str());
+    }
 }
 
 /**
@@ -250,28 +300,6 @@ MainWnd::~MainWnd()
     WSACleanup();
 }
 
-void MainWnd::setUserName(const char* name)
-{
-    ui.label_UserName->setText(QString("My username is: %1").arg(name));
-}
-
-void MainWnd::sendGetList(SOCKET server)
-{
-    char buffer[4096] = { 0 };
-
-    buffer[0] = MESSAGE_TYPE_GETLIST;
-    int size = 0;
-    memcpy(buffer + 9, &size, 4);
-    int msg_len = 13; // no payload
-    cout << "to send msg type: " << MESSAGE_TYPE_GETLIST << ", msg_len: " << msg_len << endl;
-    if (::send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
-        cout << "send failed with error: " << WSAGetLastError() << endl;
-        return;
-    }
-
-    cout << "MESSAGE_TYPE_GETLIST sent" << endl;
-}
-
 void MainWnd::sendData()
 {
     QString strMsg = ui.textEditMessage->toPlainText();
@@ -307,7 +335,12 @@ void MainWnd::sendData()
 
 }
 
-void MainWnd::addUser(int uid, const char* username)
+void MainWnd::onSetUserName(const char* name)
+{
+    ui.label_UserName->setText(QString("My username is: %1").arg(name));
+}
+
+void MainWnd::onAddUser(int uid, const char* username)
 {
     QListWidgetItem* newItem = new QListWidgetItem(QString(username));
     newItem->setData(Qt::UserRole, uid);
@@ -317,9 +350,9 @@ void MainWnd::addUser(int uid, const char* username)
         ui.pushButtonSend->setEnabled(true);
 }
 
-void MainWnd::removeUser(int uid)
+void MainWnd::onRemoveUser(int uid)
 {
-    qDebug() << "removeUser(): " << uid;
+    qDebug() << "onRemoveUser(): " << uid;
     for (int i = 0;i < ui.listWidgetClients->count();i++) {
         QListWidgetItem* item = ui.listWidgetClients->item(i);
         if (item->data(Qt::UserRole).toInt() == uid) {
@@ -333,7 +366,7 @@ void MainWnd::removeUser(int uid)
         ui.pushButtonSend->setEnabled(false);
 }
 
-void MainWnd::appendMessageLog(int from, int to, const char* msg)
+void MainWnd::onAppendMessageLog(int from, int to, const char* msg)
 {
     QString toDesc = "ALL";
     if (to != -1)
@@ -345,7 +378,7 @@ void MainWnd::appendMessageLog(int from, int to, const char* msg)
     m_logTextEdit->append(str);
 }
 
-void MainWnd::clearUsers()
+void MainWnd::onClearUsers()
 {
     ui.listWidgetClients->clear();
 }
@@ -378,14 +411,17 @@ int MainWnd::connectToServer()
     m_logTextEdit->append("Connected to server!");
 
     cout << "Connected to server!" << endl;
-    cout << "Now you can use our live chat application. "
-        << " Enter \"exit\" to disconnect" << endl;
 
-    std::thread t1(clientReceive, this);
-    std::thread t2(clientSend, this);
+    m_workerThread = new WorkerThread(m_server, m_uid, m_password.toStdString().c_str());
 
-    t1.detach();
-    t2.detach();
+    connect(m_workerThread, &WorkerThread::userList, this, &MainWnd::onUserList);
+    connect(m_workerThread, &WorkerThread::setUserName, this, &MainWnd::onSetUserName);
+    connect(m_workerThread, &WorkerThread::clearUsers, this, &MainWnd::onClearUsers);
+    connect(m_workerThread, &WorkerThread::addUser, this, &MainWnd::onAddUser);
+    connect(m_workerThread, &WorkerThread::removeUser, this, &MainWnd::onRemoveUser);
+    connect(m_workerThread, &WorkerThread::appendMessageLog, this, &MainWnd::onAppendMessageLog);
+
+    m_workerThread->start();
 
     return 0;
 }

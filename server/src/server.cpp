@@ -134,14 +134,10 @@ void serverReceive(SOCKET client) {
             LOG(INFO) << "Client login() password: " << password << endl;
 
             // lookup password
-
-            // convert uid to db stored index
-            uid -= UID_BASE;
-
-            // lookup password
-            ClientInfo info = db_query_user_password(uid);
+            ClientInfo info = db_query_user_password(uid - UID_BASE);
 
             if (info.valid != -1 && info.password == password) {
+                info.id += UID_BASE;
                 info.client = client;
                 userList.push_back(info);
                 LOG(INFO) << "Client #" << uid << " added to list\n";
@@ -268,13 +264,12 @@ void serverSendUserList(SOCKET client)
     int offset = 0;
     for (int i = 0; i < userList.size(); i++) {
         ClientInfo info = userList[i];
-        int id = info.id + UID_BASE;
         std::string username = info.username.c_str();
         int len = username.length();
 
         // 4 bytes: id, 4 bytes: size, n bytes: username
         // ... array
-        memcpy(buflist + offset, &id, 4);
+        memcpy(buflist + offset, &info.id, 4);
         memcpy(buflist + offset + 4, &len, 4);
         memcpy(buflist + offset + 8, username.c_str(), len);
         offset += (8 + len);
@@ -378,6 +373,8 @@ void http_server()
 
         int new_uid = db_add_user(d["username"].GetString(), d["gender"].GetString(), d["age"].GetInt(), d["email"].GetString(), d["password"].GetString());
         if (new_uid > 0) {
+            new_uid += UID_BASE;
+
             rapidjson::Document r;
             r.SetObject();
             r.AddMember("code", 0, r.GetAllocator());
@@ -450,7 +447,7 @@ int db_add_user(const char* username, const char* gender, int age, const char *e
 
     SQLite::Statement queryId(db, "SELECT last_insert_rowid();");
     if (queryId.executeStep()) {
-        return UID_BASE + queryId.getColumn(0).getInt();
+        return queryId.getColumn(0).getInt();
     }
     
     return -1;

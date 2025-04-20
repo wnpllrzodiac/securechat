@@ -34,6 +34,7 @@ signals:
     void clearUsers();
     void addUser(int uid, const char* name);
     void removeUser(int uid);
+    void failedLogin(std::string reason);
     void appendMessageLog(int form, int to, std::string msg);
    
 private:
@@ -56,14 +57,13 @@ public:
     SOCKET getServerSocket() const { return m_server; }
     void setUid(int uid) { m_uid = uid; }
 
-signals:
-    void userList(std::vector<UserInfo>);
 private slots:
     void onUserList(std::vector<UserInfo>);
     void onSetUserName(const char* name);
     void onClearUsers();
     void onAddUser(int uid, const char* username);
     void onRemoveUser(int uid);
+    void onFailedLogin(std::string reason);
     void onAppendMessageLog(int from, int to, std::string msg);
 
 private:

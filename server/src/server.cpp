@@ -134,21 +134,37 @@ void serverReceive(SOCKET client) {
             memcpy(password, buffer + 13 + 4, payload_len - 4);
             LOG(INFO) << "Client login() password: " << password << endl;
 
-            // lookup password
-            ClientInfo info = db_query_user_password(uid - UID_BASE);
+            int already_login = 0;
+            for (auto info : userList) {
+                if (info.id == uid) {
+                    already_login = 1;
 
-            if (info.valid != -1 && info.password == password) {
-                info.id += UID_BASE;
-                info.client = client;
-                userList.push_back(info);
-                LOG(INFO) << "Client #" << uid << " added to list\n";
-
-                serverSendLoginResultMessage(client, 0, info.username.c_str());
-
-                serverSendJoinedMessage(uid, info.username.c_str());
+                    LOG(INFO) << "Client #" << uid << " already logined\n";
+                    break;
+                }
             }
 
-            serverSendLoginResultMessage(client, -1, "failed to login");
+            if (!already_login) {
+                // lookup password
+                ClientInfo info = db_query_user_password(uid - UID_BASE);
+
+                if (info.valid != -1 && info.password == password) {
+                    info.id += UID_BASE;
+                    info.client = client;
+                    userList.push_back(info);
+                    LOG(INFO) << "Client #" << uid << " added to list\n";
+
+                    serverSendLoginResultMessage(client, 0, info.username.c_str());
+
+                    serverSendJoinedMessage(uid, info.username.c_str());
+                }
+                else {
+                    serverSendLoginResultMessage(client, -1, "invalid uid or password");
+                }
+            }
+            else{
+                serverSendLoginResultMessage(client, -1, "this uid already logined");
+            }
         }
            
             break;

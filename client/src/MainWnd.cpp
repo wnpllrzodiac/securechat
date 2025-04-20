@@ -112,16 +112,21 @@ void WorkerThread::run() {
             cout << "Login result message received" << endl;
 
             {
-                // 4 bytes result, message
+                // 4 bytes result, bytes message
                 int result;
                 char message[256] = { 0 };
                 memcpy(&result, buffer + 13, 4);
                 memcpy(message, buffer + 13 + 4, payload_len - 4);
 
                 if (result == 0) {
+                    std::cout << "login result: succesful" << std::endl;
                     emit setUserName(message);
 
                     sendGetList();
+                }
+                else {
+                    std::cout << "login result: failed" << std::endl;
+                    emit failedLogin(message);
                 }
             }
             
@@ -406,6 +411,11 @@ void MainWnd::onRemoveUser(int uid)
         ui.pushButtonSend->setEnabled(false);
 }
 
+void MainWnd::onFailedLogin(std::string reason)
+{
+    QMessageBox::warning(nullptr, "login", reason.c_str());
+}
+
 void MainWnd::onAppendMessageLog(int from, int to, std::string msg)
 {
     QString toDesc = "ALL";
@@ -462,6 +472,7 @@ int MainWnd::connectToServer()
     connect(m_workerThread, &WorkerThread::clearUsers, this, &MainWnd::onClearUsers);
     connect(m_workerThread, &WorkerThread::addUser, this, &MainWnd::onAddUser);
     connect(m_workerThread, &WorkerThread::removeUser, this, &MainWnd::onRemoveUser);
+    connect(m_workerThread, &WorkerThread::failedLogin, this, &MainWnd::onFailedLogin);
     connect(m_workerThread, &WorkerThread::appendMessageLog, this, &MainWnd::onAppendMessageLog);
 
     m_workerThread->start();

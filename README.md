@@ -12,6 +12,9 @@ SecureChat allows users to communicate through a chat with guaranteed data prote
 
 # fork from https://github.com/Sergeyais/securechat
 
+# 3p dependencies
+https://wwxf.lanzn.com/ibZeE2u0gi0h
+
 # Build
 1. `cmake -B build__ -S . -DCMAKE_PREFIX_PATH=C:\Qt\6.8.3\msvc2022_64;D:\download\code\vcpkg\installed\x64-windows --fresh`
 2. `cmake --build build__ --config Release`

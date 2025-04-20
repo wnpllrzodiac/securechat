@@ -387,11 +387,7 @@ void MainWnd::onAddUser(int uid, const char* username)
     ui.listWidgetClients->addItem(newItem);
     qDebug() << "onAddUser() add uid: " << uid << "to list";
 
-#ifdef _DEBUG
-    if (ui.listWidgetClients->count() > 0)
-#else
     if (ui.listWidgetClients->count() > 1)
-#endif
         ui.pushButtonSend->setEnabled(true);
 }
 

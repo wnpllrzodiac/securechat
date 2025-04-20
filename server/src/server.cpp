@@ -370,7 +370,11 @@ void http_server()
 {
     Server svr;
 
+#ifdef _DEBUG
     auto ret = svr.set_mount_point("/", "D:\\download\\code\\securechat\\www");
+#else
+    auto ret = svr.set_mount_point("/", "./www");
+#endif
     if (!ret) {
         // The specified base directory doesn't exist...
     }
@@ -403,16 +407,23 @@ void http_server()
 
             SQLite::Database db("chat.db3");
 
-            SQLite::Statement query(db, "SELECT level,message,added_at FROM log ORDER BY added_at");
+            SQLite::Statement query(db, "SELECT level,message,added_at FROM log");
 
             while (query.executeStep()) {
                 int level = query.getColumn(0);
-                std::string msg = query.getColumn(1).getString();
-                std::string date = query.getColumn(2).getString();
+                const char* msg = query.getColumn(1);
+                const char* date = query.getColumn(2);
+                const char* level_txt = "info";
+                if (level == 2)
+                    level_txt = "info";
+                else if (level == 4)
+                    level_txt = "warn";
+                else if (level == 5)
+                    level_txt = "error";
                 rapidjson::Value member(rapidjson::kObjectType);
-                member.AddMember("level", level, allocator);
-                member.AddMember("message", rapidjson::Value(msg.c_str(), allocator).Move(), allocator);
-                member.AddMember("added_at", rapidjson::Value(date.c_str(), allocator).Move(), allocator);
+                member.AddMember("level", rapidjson::Value(level_txt, allocator).Move(), allocator);
+                member.AddMember("message", rapidjson::Value(msg, allocator).Move(), allocator);
+                member.AddMember("added_at", rapidjson::Value(date, allocator).Move(), allocator);
                 r.PushBack(member, allocator);
             }
 
@@ -422,6 +433,7 @@ void http_server()
 
             std::string jsonStr = buffer.GetString();
             res.set_content(jsonStr, "application/json");
+            return;
         }
         catch (std::exception& e)
         {
@@ -595,6 +607,17 @@ int main() {
 
           std::cout << "id: #" << id << ", " << username << ", gender: " << (gender == 0 ? "Male" : "Female") << ", age: " << age << ", email: " << email << ", passwd: " << passwd << ", created at: " << created_date << std::endl;
       }
+
+#ifdef DUMP_LOG
+      SQLite::Statement queryLog(db, "SELECT level,message,added_at FROM log ORDER BY added_at LIMIT 30");
+
+      while (queryLog.executeStep()) {
+          int level = queryLog.getColumn(0);
+          const char* msg = queryLog.getColumn(1);
+          const char* date = queryLog.getColumn(2);
+          std::cout << "[" << level << "] " << msg << " at " << date << std::endl;
+      }
+#endif
   }
   catch (std::exception& e)
   {

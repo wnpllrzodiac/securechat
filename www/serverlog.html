@@ -49,7 +49,6 @@
                 <th>日志级别</th>
                 <th>日志内容</th>
                 <th>日志时间</th>
-                <th>项目</th>
             </tr>
         </thead>
         <tbody>
@@ -81,8 +80,7 @@
                     row.innerHTML = `
                         <td>${log.level}</td>
                         <td>${log.message}</td>
-                        <td>${log.timestamp}</td>
-                        <td>${log.project}</td>
+                        <td>${log.added_at}</td>
                     `;
                     tbody.appendChild(row);
                 });

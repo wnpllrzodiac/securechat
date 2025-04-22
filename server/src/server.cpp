@@ -342,7 +342,7 @@ void serverForwardMessage(SOCKET socket, int from, int to, char* data, int data_
         LOG(ERROR) << "send failed with error " << WSAGetLastError() << endl;
     }
 
-    LOG(INFO) << "message forwarded to: " << to;
+    LOG(INFO) << "message forwarded to: " << to << endl;
 }
 
 BOOL WINAPI console_handler(DWORD cevent)

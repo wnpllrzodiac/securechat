@@ -94,7 +94,8 @@ void serverReceive(SOCKET client) {
                     }
                 }
 
-                serverSendLeavedMessage(leaved_uid);
+                if (leaved_uid != -1)
+                    serverSendLeavedMessage(leaved_uid);
 
                 LOG(WARNING) << "recv thread exited" << std::endl;
                 return;
@@ -253,6 +254,8 @@ void serverSendJoinedMessage(int uid, const char* username)
 
 void serverSendLeavedMessage(int uid)
 {
+    LOG(INFO) << "serverSendLeavedMessage()" << "uid: " << uid << "\n";
+
     char buffer[1024] = { 0 };
     buffer[0] = MESSAGE_TYPE_LEAVED;
     int invalid_id = -1;

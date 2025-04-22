@@ -180,7 +180,7 @@ void WorkerThread::run() {
                     int name_size = *(int*)(data + pos + 4);
                     char name[64] = { 0 };
                     memcpy(name, data + pos + 8, name_size);
-                    cout << "add Client: #" << uid << ", " << name << "to user list" << endl;
+                    cout << "add Client: #" << uid << ", " << name << " to user list" << endl;
 
                     //if (ins->getUid() != uid)
                      //   ins->addUser(uid, name);

@@ -405,6 +405,9 @@ void MainWnd::onRemoveUser(int uid)
     
     if (ui.listWidgetClients->count() <= 1)
         ui.pushButtonSend->setEnabled(false);
+
+    ui.listWidgetClients->setCurrentRow(0);
+    m_to_uid = -1;
 }
 
 void MainWnd::onFailedLogin(std::string reason)

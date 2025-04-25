@@ -351,7 +351,7 @@ BOOL WINAPI console_handler(DWORD cevent)
     {
     case  CTRL_C_EVENT:
         LOG(INFO) << "encrypt log file with DES\n";
-        encrypt_DES_File("server.log", "server_enc.log");
+        //encrypt_DES_File("server.log", "server_enc.log");
         exit(0);
         break;
     case  CTRL_BREAK_EVENT:
@@ -540,91 +540,124 @@ int db_add_user(const char* username, const char* gender, int age, const char *e
     return -1;
 }
 
+int db_create_tables()
+{
+    try
+    {
+        // Open a database file
+        SQLite::Database    db("chat.db3", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+
+        // 0-male, 1-female
+        int nb = db.exec("CREATE TABLE IF NOT EXISTS user( \
+            id INTEGER PRIMARY KEY AUTOINCREMENT,\
+            name TEXT NOT NULL,\
+            gender INTEGER DEFAULT 0,\
+            age INTEGER NOT NULL,\
+            email TEXT UNIQUE,\
+            password TEXT NOT NULL,\
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP\
+        )");
+        std::cout << "create table user: " << nb << std::endl;
+
+        // log level: 2-info, 4-warning, 5-error
+        nb = db.exec("CREATE TABLE IF NOT EXISTS log( \
+            id INTEGER PRIMARY KEY AUTOINCREMENT,\
+            level INTEGER NOT NULL,\
+            message TEXT NOT NULL,\
+            added_at DATETIME DEFAULT CURRENT_TIMESTAMP\
+        )");
+        std::cout << "create table log: " << nb << std::endl;
+
+        // event: 10-login(succesfully), 11-login(failed with invalid uid), 12-login(failed with already logined), 13-login(failed with mismatch username/passwd)
+        // event: 20-logout
+        nb = db.exec("CREATE TABLE IF NOT EXISTS userevent( \
+            id INTEGER PRIMARY KEY AUTOINCREMENT,\
+            uid INTEGER NOT NULL,\
+            event INTEGER NOT NULL,\
+            event_at DATETIME DEFAULT CURRENT_TIMESTAMP\
+        )");
+        std::cout << "create table userevent: " << nb << std::endl;
+
+        nb = db.exec("CREATE TABLE IF NOT EXISTS usermessage( \
+            id INTEGER PRIMARY KEY AUTOINCREMENT,\
+            uid INTEGER NOT NULL,\
+            from INTEGER NOT NULL,\
+            to INTEGER NOT NULL,\
+            message TEXT NOT NULL,\
+            added_at DATETIME DEFAULT CURRENT_TIMESTAMP\
+        )");
+        std::cout << "create table usermessage: " << nb << std::endl;
+
+#ifdef INSERT_DATA
+        nb = db.exec("INSERT INTO user (name, gender, age, email, password, created_at) VALUES (\"aa01\", 0, 23, \"aa01@sohu.com\", \"123456\", datetime('now', 'localtime'))");
+        std::cout << "insert table: " << nb << std::endl;
+
+        nb = db.exec("INSERT INTO user (name, gender, age, email, password, created_at) VALUES (\"aa02\", 0, 34, \"aa02@sohu.com\", \"123456\", datetime('now', 'localtime'))");
+        std::cout << "insert table: " << nb << std::endl;
+
+        nb = db.exec("INSERT INTO user (name, gender, age, email, password, created_at) VALUES (\"bb01\", 1, 46, \"bb01@sohu.com\", \"123456\", datetime('now', 'localtime'))");
+        std::cout << "insert table: " << nb << std::endl;
+#endif
+
+#ifdef CONDITION_SEARCH
+        // Compile a SQL query, containing one parameter (index 1)
+        SQLite::Statement query(db, "SELECT * FROM user WHERE name LIKE ?");
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        query.bind(1, "%aa%");
+#else
+        SQLite::Statement query(db, "SELECT * FROM user");
+#endif
+
+        // Loop to execute the query step by step, to get rows of result
+        while (query.executeStep())
+        {
+            // Demonstrate how to get some typed column value
+            int         id = UID_BASE + (int)query.getColumn(0);
+            const char* username = query.getColumn(1);
+            int gender = query.getColumn(2);
+            int age = query.getColumn(3);
+            const char* email = query.getColumn(4);
+            const char* passwd = query.getColumn(5);
+            const char* created_date = query.getColumn(6);
+
+            std::cout << "id: #" << id << ", " << username << ", gender: " << (gender == 0 ? "Male" : "Female") << ", age: " << age << ", email: " << email << ", passwd: " << passwd << ", created at: " << created_date << std::endl;
+        }
+
+#ifdef DUMP_LOG
+        SQLite::Statement queryLog(db, "SELECT level,message,added_at FROM log ORDER BY added_at LIMIT 30");
+
+        while (queryLog.executeStep()) {
+            int level = queryLog.getColumn(0);
+            const char* msg = queryLog.getColumn(1);
+            const char* date = queryLog.getColumn(2);
+            std::cout << "[" << level << "] " << msg << " at " << date << std::endl;
+        }
+#endif
+    }
+    catch (std::exception& e)
+    {
+        std::cout << "exception: " << e.what() << std::endl;
+        return -1;
+    }
+
+    return 0;
+}
+
 /**
  * @brief Main function to create a server, accept client connections, and start
  * the chat application.
  * @return {int} Exit status of the application.
  */
 int main() {
-  if (SetConsoleCtrlHandler((PHANDLER_ROUTINE)console_handler, TRUE) == FALSE)
+    if (SetConsoleCtrlHandler((PHANDLER_ROUTINE)console_handler, TRUE) == FALSE) {
+        printf("failed to set ctrl handler\n");
+        return -1;
+    }
+
+  if (db_create_tables() != 0) {
+      printf("failed to init db\n");
       return -1;
-
-  try
-  {
-      // Open a database file
-      SQLite::Database    db("chat.db3", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
-
-      // 0-male, 1-female
-      int nb = db.exec("CREATE TABLE IF NOT EXISTS user( \
-          id INTEGER PRIMARY KEY AUTOINCREMENT,\
-          name TEXT NOT NULL,\
-          gender INTEGER DEFAULT 0,\
-          age INTEGER NOT NULL,\
-          email TEXT UNIQUE,\
-          password TEXT NOT NULL,\
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP\
-      )");
-      std::cout << "create table user: " << nb << std::endl;
-
-      // log level: 2-info, 4-warning, 5-error
-      nb = db.exec("CREATE TABLE IF NOT EXISTS log( \
-          id INTEGER PRIMARY KEY AUTOINCREMENT,\
-          level INTEGER NOT NULL,\
-          message TEXT NOT NULL,\
-          added_at DATETIME DEFAULT CURRENT_TIMESTAMP\
-      )");
-      std::cout << "create table log: " << nb << std::endl;
-
-#ifdef INSERT_DATA
-      nb = db.exec("INSERT INTO user (name, gender, age, email, password, created_at) VALUES (\"aa01\", 0, 23, \"aa01@sohu.com\", \"123456\", datetime('now', 'localtime'))");
-      std::cout << "insert table: " << nb << std::endl;
-
-      nb = db.exec("INSERT INTO user (name, gender, age, email, password, created_at) VALUES (\"aa02\", 0, 34, \"aa02@sohu.com\", \"123456\", datetime('now', 'localtime'))");
-      std::cout << "insert table: " << nb << std::endl;
-
-      nb = db.exec("INSERT INTO user (name, gender, age, email, password, created_at) VALUES (\"bb01\", 1, 46, \"bb01@sohu.com\", \"123456\", datetime('now', 'localtime'))");
-      std::cout << "insert table: " << nb << std::endl;
-#endif
-
-#ifdef CONDITION_SEARCH
-      // Compile a SQL query, containing one parameter (index 1)
-      SQLite::Statement query(db, "SELECT * FROM user WHERE name LIKE ?");
-
-      // Bind the integer value 6 to the first parameter of the SQL query
-      query.bind(1, "%aa%");
-#else
-      SQLite::Statement query(db, "SELECT * FROM user");
-#endif
-
-      // Loop to execute the query step by step, to get rows of result
-      while (query.executeStep())
-      {
-          // Demonstrate how to get some typed column value
-          int         id = UID_BASE + (int)query.getColumn(0);
-          const char* username = query.getColumn(1);
-          int gender = query.getColumn(2);
-          int age = query.getColumn(3);
-          const char* email = query.getColumn(4);
-          const char* passwd = query.getColumn(5);
-          const char* created_date = query.getColumn(6);
-
-          std::cout << "id: #" << id << ", " << username << ", gender: " << (gender == 0 ? "Male" : "Female") << ", age: " << age << ", email: " << email << ", passwd: " << passwd << ", created at: " << created_date << std::endl;
-      }
-
-#ifdef DUMP_LOG
-      SQLite::Statement queryLog(db, "SELECT level,message,added_at FROM log ORDER BY added_at LIMIT 30");
-
-      while (queryLog.executeStep()) {
-          int level = queryLog.getColumn(0);
-          const char* msg = queryLog.getColumn(1);
-          const char* date = queryLog.getColumn(2);
-          std::cout << "[" << level << "] " << msg << " at " << date << std::endl;
-      }
-#endif
-  }
-  catch (std::exception& e)
-  {
-      std::cout << "exception: " << e.what() << std::endl;
   }
 
   auto sink_cout = make_shared<AixLog::SinkCout>(AixLog::Severity::info);

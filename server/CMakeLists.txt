@@ -3,6 +3,7 @@ project(server)
 
 set(CMAKE_CXX_STANDARD 11)
 
+find_package(curl REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(SQLiteCpp REQUIRED)
 find_package(rapidjson REQUIRED)
@@ -14,7 +15,7 @@ add_executable(server src/server.cpp src/httplib.h src/cipher.c)
 
 
 target_link_libraries(server PRIVATE wsock32 ws2_32)
-target_link_libraries(server PRIVATE ${OPENSSL_LIBRARIES} SQLiteCpp rapidjson)
+target_link_libraries(server PRIVATE ${OPENSSL_LIBRARIES} curl SQLiteCpp rapidjson)
 
 add_subdirectory(tests)
 

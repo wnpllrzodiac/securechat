@@ -25,6 +25,8 @@ enum MESSAGE_TYPE {
     MESSAGE_TYPE_JOINED,
     MESSAGE_TYPE_LEAVED,
     MESSAGE_TYPE_LOGINRESULT = 20,
+    MESSAGE_TYPE_FORGETPASSWORD = 21,
+    MESSAGE_TYPE_FORGETPASSWORDRESULT = 22,
     MESSAGE_TYPE_MESSAGE = 30,
     MESSAGE_TYPE_EXIT = 40,
 };
@@ -196,6 +198,17 @@ void WorkerThread::run() {
             }
 
 			break;
+        case MESSAGE_TYPE_FORGETPASSWORDRESULT:
+        {
+            // 1 byte: result, bytes: message
+            char* data = buffer + 13;
+            unsigned char result = 0;
+            memcpy(&result, data, 1);
+            char message[256] = { 0 };
+            memcpy(message, data + 1, payload_len - 1);
+            emit forgetPasswordResult(result, std::string(message));
+        }
+            break;
         default:
             break;
         }
@@ -301,6 +314,7 @@ MainWnd::MainWnd(QWidget* parent)
 
     QObject::connect(ui.pushButtonConnect, &QPushButton::clicked, this, &MainWnd::connectToServer);
     QObject::connect(ui.pushButtonSend, &QPushButton::clicked, this, &MainWnd::sendMessage);
+    QObject::connect(ui.pushButtonSendMail, &QPushButton::clicked, this, &MainWnd::sendForgetPassword);
     QObject::connect(ui.listWidgetClients, &QListWidget::itemClicked, this, [&](QListWidgetItem* item) {
         m_to_uid = item->data(Qt::UserRole).toInt();
         cout << "m_to_uid set to: " << m_to_uid << endl;
@@ -324,6 +338,42 @@ QString MainWnd::getNameFromUID(int uid)
     }
 
     return "";
+}
+
+void MainWnd::sendForgetPassword()
+{
+    /*connectToServer();
+    if (m_server == INVALID_SOCKET) {
+		QMessageBox::warning(nullptr, "error", "failed to connect to server");
+		return;
+	}*/
+
+    QString strEmail = ui.lineEditEmail->text();
+    if (strEmail.isEmpty()) {
+        return;
+    }
+
+    char buffer[4096] = { 0 };
+
+    memset(buffer, 0, 4096);
+
+    buffer[0] = MESSAGE_TYPE_FORGETPASSWORD;
+    int payload_size = 4 + strEmail.length();
+    memcpy(buffer + 1, &m_uid, 4); // from user id
+    memcpy(buffer + 5, &m_to_uid, 4); // to user id
+    memcpy(buffer + 9, &payload_size, 4);
+
+    // 4 bytes uid, bytes message
+    memcpy(buffer + 13, &m_uid, 4);
+    memcpy(buffer + 13 + 4, strEmail.toStdString().c_str(), strEmail.length());
+    cout << "to send msg type: " << MESSAGE_TYPE_FORGETPASSWORD << endl;
+
+    int msg_len = 13 + payload_size;
+    if (::send(m_server, buffer, msg_len, 0) == SOCKET_ERROR) {
+        cout << "send failed with error: " << WSAGetLastError() << endl;
+        QMessageBox::warning(nullptr, "error", "failed to send message");
+        return;
+    }
 }
 
 void MainWnd::sendMessage()
@@ -415,6 +465,16 @@ void MainWnd::onFailedLogin(std::string reason)
     QMessageBox::warning(nullptr, "login", reason.c_str());
 }
 
+void MainWnd::onForgetPasswordResult(int success, std::string message)
+{
+    if (success == 0) {
+		QMessageBox::information(nullptr, "Forget password", "Email sent successfully");
+	}
+    else {
+		QMessageBox::warning(nullptr, "Forget password", message.c_str());
+	}
+}
+
 void MainWnd::onAppendMessageLog(int from, int to, std::string msg)
 {
     QString toDesc = "ALL";
@@ -472,6 +532,7 @@ int MainWnd::connectToServer()
     connect(m_workerThread, &WorkerThread::addUser, this, &MainWnd::onAddUser);
     connect(m_workerThread, &WorkerThread::removeUser, this, &MainWnd::onRemoveUser);
     connect(m_workerThread, &WorkerThread::failedLogin, this, &MainWnd::onFailedLogin);
+    connect(m_workerThread, &WorkerThread::forgetPasswordResult, this, &MainWnd::onForgetPasswordResult);
     connect(m_workerThread, &WorkerThread::appendMessageLog, this, &MainWnd::onAppendMessageLog);
 
     m_workerThread->start();

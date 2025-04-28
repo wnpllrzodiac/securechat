@@ -27,6 +27,7 @@ struct ClientInfo {
     int         id;
     std::string username;
     std::string password;
+    std::string email;
     SOCKET      client;
 
     ClientInfo():valid(-1), id(-1), client(-1) {
@@ -43,6 +44,8 @@ enum MESSAGE_TYPE {
     MESSAGE_TYPE_JOINED,
     MESSAGE_TYPE_LEAVED,
     MESSAGE_TYPE_LOGINRESULT = 20,
+    MESSAGE_TYPE_FORGETPASSWORD = 21,
+    MESSAGE_TYPE_FORGETPASSWORDRESULT = 22,
     MESSAGE_TYPE_MESSAGE = 30,
     MESSAGE_TYPE_EXIT = 40,
 };
@@ -60,6 +63,7 @@ void serverSendJoinedMessage(int uid, const char* username);
 void serverSendLeavedMessage(int uid);
 void serverSendLoginResultMessage(SOCKET client, int success, const char* msg);
 void serverForwardMessage(SOCKET socket, int from, int to, char* data, int data_len);
+void serverSendForgetPasswordMessage(SOCKET client, unsigned char result, char* message);
 
 int db_add_user(const char* username, const char* gender, int age, const char* email, const char* password);
 ClientInfo db_query_user_password(int uid);
@@ -84,10 +88,13 @@ static const char* payload_text =
 "The body of the message starts here.\r\n"
 "\r\n"
 "It could be a lot of lines, could be MIME encoded, whatever.\r\n"
-"Check RFC 5322.\r\n";
+"Your password is $PASSWORD.\r\n";
+
+std::string payload_text_changed;
 
 struct upload_status {
     size_t bytes_read;
+    std::string password;
 };
 
 static size_t payload_source(char* ptr, size_t size, size_t nmemb, void* userp)
@@ -100,7 +107,8 @@ static size_t payload_source(char* ptr, size_t size, size_t nmemb, void* userp)
         return 0;
     }
 
-    data = &payload_text[upload_ctx->bytes_read];
+    const char* txt = payload_text_changed.c_str();
+    data = &txt[upload_ctx->bytes_read];
 
     if (data) {
         size_t len = strlen(data);
@@ -115,8 +123,11 @@ static size_t payload_source(char* ptr, size_t size, size_t nmemb, void* userp)
     return 0;
 }
 
-static int send_mail()
+static int send_mail(const char* to_addr, const char* password)
 {
+    std::string string(payload_text);
+    payload_text_changed = std::regex_replace(string, std::regex("\\$PASSWORD"), password);
+
     CURL* curl;
     CURLcode res = CURLE_OK;
     struct curl_slist* recipients = NULL;
@@ -126,13 +137,13 @@ static int send_mail()
     if (curl) {
         curl_easy_setopt(curl, CURLOPT_URL, "smtps://smtp.163.com:465");
         curl_easy_setopt(curl, CURLOPT_USERNAME, "shxm.ma@163.com");
-        curl_easy_setopt(curl, CURLOPT_PASSWORD, "YOUR_PASSWORD");
+        curl_easy_setopt(curl, CURLOPT_PASSWORD, "xxxxxx");
 
         curl_easy_setopt(curl, CURLOPT_MAIL_FROM, FROM_ADDR);
 
         struct curl_slist* recipients = nullptr;
-        recipients = curl_slist_append(recipients, TO_ADDR);
-        recipients = curl_slist_append(recipients, CC_ADDR);
+        recipients = curl_slist_append(recipients, to_addr);
+        //recipients = curl_slist_append(recipients, CC_ADDR);
         curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
 
         curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_ALL);
@@ -242,7 +253,7 @@ void serverReceive(SOCKET client) {
                 // lookup password
                 ClientInfo info = db_query_user_password(uid - UID_BASE);
 
-                if (info.valid != -1 && info.password == password) {
+                if (info.valid == 1 && info.password == password) {
                     info.id += UID_BASE;
                     info.client = client;
                     userList.push_back(info);
@@ -301,6 +312,28 @@ void serverReceive(SOCKET client) {
         case MESSAGE_TYPE_EXIT:
             LOG(INFO) << "Client Disconnected.";
             break;
+        case MESSAGE_TYPE_FORGETPASSWORD:
+        {
+            // 4 bytes uid, bytes email
+            memcpy(&uid, buffer + 13, 4);
+            LOG(INFO) << "Client forgetpassword() uid: " << uid << endl;
+
+            char email[64] = { 0 };
+            memcpy(email, buffer + 13 + 4, payload_len - 4);
+            LOG(INFO) << "Client forgetpassword() email: " << email << endl;
+
+            ClientInfo info = db_query_user_password(uid - UID_BASE);
+            if (info.valid == 1 && stricmp(email, info.email.c_str()) == 0) {
+                send_mail(email, info.password.c_str());
+                serverSendForgetPasswordMessage(client, 0, "mail sent.");
+            }
+            else {
+                LOG(ERROR) << "invalid uid or password: is_valid: " << info.valid << ", " << info.password << endl;
+                serverSendForgetPasswordMessage(client, 1, "uid and email mismatch");
+            }
+
+        }
+            break;
         default:
             break;
         }
@@ -315,6 +348,29 @@ void serverReceive(SOCKET client) {
             memset(buffer, 0, sizeof(buffer));
             offset = 0;
         }
+    }
+}
+
+void serverSendForgetPasswordMessage(SOCKET client, unsigned char result, char *message)
+{
+    char buffer[1024] = { 0 };
+    buffer[0] = MESSAGE_TYPE_FORGETPASSWORDRESULT;
+    int invalid_id = -1;
+    memcpy(buffer + 1, &invalid_id, 4); // from
+    memcpy(buffer + 5, &invalid_id, 4); // to
+
+    int len = strlen(message);
+
+    int payload_len = len + 1;
+    memcpy(buffer + 9, &payload_len, 4);
+
+    // 1 byte: result, bytes: message
+
+    memcpy(buffer + 13, &result, 1);
+    memcpy(buffer + 13 + 1, message, len);
+
+    if (send(client, buffer, 13 + payload_len, 0) == SOCKET_ERROR) {
+        LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;
     }
 }
 
@@ -581,16 +637,18 @@ ClientInfo db_query_user_password(int uid)
     try {
         SQLite::Database db("chat.db3");
 
-        SQLite::Statement query(db, "SELECT name,password FROM user WHERE id = ?");
+        SQLite::Statement query(db, "SELECT name,password,email FROM user WHERE id = ?");
         query.bind(1, uid);
 
         if (query.executeStep()) {
             info.valid = 1;
             const char* name = query.getColumn(0);
             const char* password = query.getColumn(1);
+            const char* email = query.getColumn(2);
             info.id = uid;
             info.username = name;
             info.password = password;
+            info.email = email;
         }
     }
     catch (std::exception& e)
@@ -641,8 +699,6 @@ int db_add_user(const char* username, const char* gender, int age, const char *e
 int main() {
   if (SetConsoleCtrlHandler((PHANDLER_ROUTINE)console_handler, TRUE) == FALSE)
       return -1;
-
-  send_mail();
 
   try
   {

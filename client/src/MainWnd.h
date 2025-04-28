@@ -35,6 +35,7 @@ signals:
     void addUser(int uid, const char* name);
     void removeUser(int uid);
     void failedLogin(std::string reason);
+    void forgetPasswordResult(int success, std::string message);
     void appendMessageLog(int form, int to, std::string msg);
    
 private:
@@ -64,12 +65,14 @@ private slots:
     void onAddUser(int uid, const char* username);
     void onRemoveUser(int uid);
     void onFailedLogin(std::string reason);
+    void onForgetPasswordResult(int success, std::string message);
     void onAppendMessageLog(int from, int to, std::string msg);
 
 private:
     int connectToServer();
     QString getNameFromUID(int uid);
     void sendMessage();
+    void sendForgetPassword();
 private:
     SOCKET          m_server;
     QTextEdit*      m_logTextEdit;

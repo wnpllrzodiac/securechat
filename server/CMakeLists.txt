@@ -15,7 +15,7 @@ add_executable(server src/server.cpp src/httplib.h src/cipher.c)
 
 
 target_link_libraries(server PRIVATE wsock32 ws2_32)
-target_link_libraries(server PRIVATE ${OPENSSL_LIBRARIES} curl SQLiteCpp rapidjson)
+target_link_libraries(server PRIVATE ${OPENSSL_LIBRARIES} ${CURL_LIBRARY} SQLiteCpp rapidjson)
 
 add_subdirectory(tests)
 

@@ -50,6 +50,14 @@ enum MESSAGE_TYPE {
     MESSAGE_TYPE_EXIT = 40,
 };
 
+enum USEREVENT_TYPE {
+    USEREVENT_LOGIN_SUCCESS,
+    USEREVENT_LOGIN_INVALID_UID,
+    USEREVENT_LOGIN_ALREADY_LOGIN,
+    USEREVENT_LOGIN_WRONG_PASSWORD,
+    USEREVENT_LOGOUT
+};
+
 /*
 1 byte: message type
 4 bytes: from
@@ -67,6 +75,8 @@ void serverSendForgetPasswordMessage(SOCKET client, unsigned char result, char* 
 
 int db_add_user(const char* username, const char* gender, int age, const char* email, const char* password);
 ClientInfo db_query_user_password(int uid);
+int db_add_user_event(int uid, int event);
+int db_add_user_msg(int from, int to, const char* msg);
 
 extern "C" {
     char g_key[16] = { 0 };
@@ -188,7 +198,7 @@ static int send_mail(const char* to_addr, const char* password)
 void serverReceive(SOCKET client) {
     const int MAX_BUFFER_SIZE = 4096;
     char buffer[MAX_BUFFER_SIZE] = {0};
-    char decrypted[MAX_BUFFER_SIZE] = { 0 };
+    char encrypted_msg[MAX_BUFFER_SIZE] = { 0 };
     int offset = 0;
     int readed = -1;
     int curr_payload_len = -1;
@@ -211,8 +221,13 @@ void serverReceive(SOCKET client) {
                     }
                 }
 
-                if (leaved_uid != -1)
-                    serverSendLeavedMessage(leaved_uid);
+                if (leaved_uid != -1) {
+                    ClientInfo ci = db_query_user_password(leaved_uid - UID_BASE);
+                    if (ci.valid == 1) {
+                        db_add_user_event(leaved_uid - UID_BASE, USEREVENT_LOGOUT);
+                        serverSendLeavedMessage(leaved_uid);
+                    }
+                }
 
                 LOG(WARNING) << "recv thread exited" << std::endl;
                 return;
@@ -237,7 +252,7 @@ void serverReceive(SOCKET client) {
             continue;
         }
 
-        memset(decrypted, 0, MAX_BUFFER_SIZE);
+        memset(encrypted_msg, 0, MAX_BUFFER_SIZE);
 
         int uid = -1;
         unsigned char is_enc = 0;
@@ -267,6 +282,8 @@ void serverReceive(SOCKET client) {
                 ClientInfo info = db_query_user_password(uid - UID_BASE);
 
                 if (info.valid == 1 && info.password == password) {
+                    db_add_user_event(info.id, USEREVENT_LOGIN_SUCCESS);
+
                     info.id += UID_BASE;
                     info.client = client;
                     userList.push_back(info);
@@ -277,33 +294,51 @@ void serverReceive(SOCKET client) {
                     serverSendJoinedMessage(uid, info.username.c_str());
                 }
                 else {
+                    db_add_user_event(uid - UID_BASE, USEREVENT_LOGIN_WRONG_PASSWORD);
                     serverSendLoginResultMessage(client, -1, "invalid uid or password");
                 }
             }
             else{
+                db_add_user_event(uid - UID_BASE, USEREVENT_LOGIN_ALREADY_LOGIN);
                 serverSendLoginResultMessage(client, -1, "this uid already logined");
             }
         }
            
             break;
         case MESSAGE_TYPE_MESSAGE:
+        {
             // 1 byte is_enc, bytes message
             memcpy(&is_enc, buffer + 13, 1);
-            memcpy(decrypted, buffer + 13 + 1, payload_len - 1);
-            LOG(INFO) << "Client msg(encrypted): " << decrypted << ", to: " << msg_to << "\n";
+            memcpy(encrypted_msg, buffer + 13 + 1, payload_len - 1);
+            LOG(INFO) << "Client msg(encrypted): " << encrypted_msg << ", to: " << msg_to << "\n";
             printf("is_enc: %d\n", is_enc);
+
+            int user_from = msg_from;
+            int user_to = msg_to;
+            if (user_from != -1)
+                user_from -= UID_BASE;
+            if (user_to != -1)
+                user_to -= UID_BASE;
+
+            char decrypted_msg[MAX_BUFFER_SIZE] = { 0 };
+            if (is_enc) {
+                memcpy(decrypted_msg, encrypted_msg, payload_len - 1);
+                decrypt_AES(decrypted_msg, payload_len - 1);
+                db_add_user_msg(user_from, user_to, decrypted_msg);
+            }
+            else {
+                db_add_user_msg(user_from, user_to, encrypted_msg);
+            }
 
             if (msg_to == -1) {
                 // broadcast
-                if (is_enc)
-                    decrypt_AES(decrypted, payload_len - 1);
-                LOG(INFO) << "broadcast msg: " << decrypted << "\n";
+                LOG(INFO) << "broadcast msg: " << (is_enc ? decrypted_msg : encrypted_msg) << "\n";
 
                 for (ClientInfo info : userList) {
                     if (info.id != msg_from) {
                         LOG(INFO) << "broadcast msg to: " << info.id << "\n";
-						serverForwardMessage(info.client, msg_from, msg_to, buffer + 13, payload_len);
-					}
+                        serverForwardMessage(info.client, msg_from, msg_to, buffer + 13, payload_len);
+                    }
                 }
             }
             else {
@@ -315,9 +350,8 @@ void serverReceive(SOCKET client) {
                         break;
                     }
                 }
-                
             }
-
+        }
             break;
         case MESSAGE_TYPE_GETLIST:
             serverSendUserList(client);
@@ -743,12 +777,10 @@ int db_create_tables()
         )");
         std::cout << "create table userevent: " << nb << std::endl;
 
-        nb = db.exec("DROP TABLE usermessage");
-
         nb = db.exec("CREATE TABLE IF NOT EXISTS usermessage( \
             id INTEGER PRIMARY KEY AUTOINCREMENT,\
-            from INTEGER NOT NULL,\
-            to INTEGER NOT NULL,\
+            from_user INTEGER NOT NULL,\
+            to_user INTEGER NOT NULL,\
             message TEXT NOT NULL,\
             added_at DATETIME DEFAULT CURRENT_TIMESTAMP\
         )");
@@ -826,7 +858,7 @@ int db_add_user_msg(int from, int to, const char* msg)
 {
     SQLite::Database db("chat.db3", SQLite::OPEN_READWRITE);
 
-    SQLite::Statement query(db, "INSERT INTO usermsg (from, to, msg, created_at) VALUES (?, ?, ?, datetime('now', 'localtime'))");
+    SQLite::Statement query(db, "INSERT INTO usermsg (from_user, to_user, msg, created_at) VALUES (?, ?, ?, datetime('now', 'localtime'))");
     query.bind(1, from);
     query.bind(2, to);
     query.bind(3, msg);

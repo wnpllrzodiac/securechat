@@ -24,6 +24,7 @@ https://github.com/badaix/aixlog
 
 # sqlite
 https://github.com/SRombauts/SQLiteCpp
+https://inloop.github.io/sqlite-viewer/
 
 # httplib
 https://github.com/yhirose/cpp-httplib

@@ -68,6 +68,19 @@ void serverSendForgetPasswordMessage(SOCKET client, unsigned char result, char* 
 int db_add_user(const char* username, const char* gender, int age, const char* email, const char* password);
 ClientInfo db_query_user_password(int uid);
 
+extern "C" {
+    char g_key[16] = { 0 };
+}
+
+void generate_random_string(char* str, size_t length = 16) {
+    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    size_t charset_size = sizeof(charset) - 1;
+
+    for (size_t i = 0; i < length; i++) {
+        str[i] = charset[rand() % charset_size];
+    }
+}
+
 #define FROM_ADDR    "<shxm.ma@163.com>"
 #define TO_ADDR      "<wnpllr@gmail.com>"
 #define CC_ADDR      "<info@example.org>"
@@ -466,13 +479,14 @@ void serverSendLoginResultMessage(SOCKET client, int success, const char* msg) {
     buffer[0] = MESSAGE_TYPE_LOGINRESULT;
     memset(buffer + 1, 0, 4);
     memset(buffer + 5, 0, 4);
-    int payload_size = 4 + strlen(msg);
+    int payload_size = 4 + 16 + strlen(msg);
     memcpy(buffer + 9, &payload_size, 4);
     
     // payload
-    // 4 bytes result, message
+    // 4 bytes result, 16 bytes key, N bytes message
     memcpy(buffer + 13, &success, 4);
-    memcpy(buffer + 13 + 4, msg, strlen(msg));
+    memcpy(buffer + 13 + 4, g_key, 16);
+    memcpy(buffer + 13 + 4 + 16, msg, strlen(msg));
 
     if (send(client, buffer, 13 + payload_size, 0) == SOCKET_ERROR) {
         LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;
@@ -699,6 +713,11 @@ int db_add_user(const char* username, const char* gender, int age, const char *e
 int main() {
   if (SetConsoleCtrlHandler((PHANDLER_ROUTINE)console_handler, TRUE) == FALSE)
       return -1;
+
+  generate_random_string(g_key);
+  char str_key[17] = { 0 };
+  memcpy(str_key, g_key, 16);
+  std::cout << "key: " << str_key << std::endl;
 
   try
   {

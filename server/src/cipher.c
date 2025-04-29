@@ -6,6 +6,8 @@
 #include <stdio.h>
 //#include <string>
 
+extern char g_key[16];
+
 /**
  * @brief Function for getting the key
  * The function opens the file key.txt and gets the key
@@ -32,7 +34,8 @@ const unsigned char *getkey() {
   file.close();
   return defaultKey;
   */
-    return "1234567890abcdef";
+    //return "1234567890abcdef";
+    return g_key;
 }
 
 

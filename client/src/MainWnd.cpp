@@ -31,6 +31,10 @@ enum MESSAGE_TYPE {
     MESSAGE_TYPE_EXIT = 40,
 };
 
+extern "C" {
+    char g_key[16] = { 0 };
+}
+
 string readme(string username) {
     string s = BLU;
     s += "[server]: Welcome to Safe Chat, " + username + " \n";
@@ -114,14 +118,19 @@ void WorkerThread::run() {
             cout << "Login result message received" << endl;
 
             {
-                // 4 bytes result, bytes message
+                // 4 bytes result, 16 bytes key, N bytes message
                 int result;
                 char message[256] = { 0 };
                 memcpy(&result, buffer + 13, 4);
-                memcpy(message, buffer + 13 + 4, payload_len - 4);
+                memcpy(g_key, buffer + 13 + 4, 16);
+                memcpy(message, buffer + 13 + 4 + 16, payload_len - 4 - 16);
 
                 if (result == 0) {
                     std::cout << "login result: succesful" << std::endl;
+
+                    char str_key[17] = { 0 };
+                    memcpy(str_key, g_key, 16);
+                    std::cout << "key: " << str_key << std::endl;
                     emit setUserName(message);
 
                     sendGetList();

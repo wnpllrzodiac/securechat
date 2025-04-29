@@ -705,6 +705,30 @@ int db_add_user(const char* username, const char* gender, int age, const char *e
     return -1;
 }
 
+int db_add_user_event(int uid, int event)
+{
+    SQLite::Database db("chat.db3", SQLite::OPEN_READWRITE);
+
+    SQLite::Statement query(db, "INSERT INTO userevent (uid, event, created_at) VALUES (?, ?, datetime('now', 'localtime'))");
+    query.bind(1, uid);
+    query.bind(2, event);
+    int nb = query.exec();
+
+    return 0;
+}
+
+int db_add_user_msg(int uid, const char* msg)
+{
+    SQLite::Database db("chat.db3", SQLite::OPEN_READWRITE);
+
+    SQLite::Statement query(db, "INSERT INTO usermsg (uid, msg, created_at) VALUES (?, ?, datetime('now', 'localtime'))");
+    query.bind(1, uid);
+    query.bind(2, msg);
+    int nb = query.exec();
+
+    return 0;
+}
+
 /**
  * @brief Main function to create a server, accept client connections, and start
  * the chat application.

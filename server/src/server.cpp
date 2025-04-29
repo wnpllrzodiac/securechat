@@ -12,6 +12,7 @@
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
+#include <curl/curl.h>
 
 using namespace std;
 using namespace httplib;
@@ -26,6 +27,7 @@ struct ClientInfo {
     int         id;
     std::string username;
     std::string password;
+    std::string email;
     SOCKET      client;
 
     ClientInfo():valid(-1), id(-1), client(-1) {
@@ -42,6 +44,8 @@ enum MESSAGE_TYPE {
     MESSAGE_TYPE_JOINED,
     MESSAGE_TYPE_LEAVED,
     MESSAGE_TYPE_LOGINRESULT = 20,
+    MESSAGE_TYPE_FORGETPASSWORD = 21,
+    MESSAGE_TYPE_FORGETPASSWORDRESULT = 22,
     MESSAGE_TYPE_MESSAGE = 30,
     MESSAGE_TYPE_EXIT = 40,
 };
@@ -59,9 +63,122 @@ void serverSendJoinedMessage(int uid, const char* username);
 void serverSendLeavedMessage(int uid);
 void serverSendLoginResultMessage(SOCKET client, int success, const char* msg);
 void serverForwardMessage(SOCKET socket, int from, int to, char* data, int data_len);
+void serverSendForgetPasswordMessage(SOCKET client, unsigned char result, char* message);
 
 int db_add_user(const char* username, const char* gender, int age, const char* email, const char* password);
 ClientInfo db_query_user_password(int uid);
+
+extern "C" {
+    char g_key[16] = { 0 };
+}
+
+void generate_random_string(char* str, size_t length = 16) {
+    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    size_t charset_size = sizeof(charset) - 1;
+
+    for (size_t i = 0; i < length; i++) {
+        str[i] = charset[rand() % charset_size];
+    }
+}
+
+#define FROM_ADDR    "<shxm.ma@163.com>"
+#define TO_ADDR      "<wnpllr@gmail.com>"
+#define CC_ADDR      "<info@example.org>"
+
+#define FROM_MAIL "Sender Person " FROM_ADDR
+#define TO_MAIL   "A Receiver " TO_ADDR
+#define CC_MAIL   "John CC Smith " CC_ADDR
+
+static const char* payload_text =
+"Date: Mon, 29 Nov 2010 21:54:29 +1100\r\n"
+"To: " TO_MAIL "\r\n"
+"From: " FROM_MAIL "\r\n"
+"Cc: " CC_MAIL "\r\n"
+"Message-ID: <dcd7cb36-11db-487a-9f3a-e652a9458efd@"
+"rfcpedant.example.org>\r\n"
+"Subject: SMTP example message\r\n"
+"\r\n" /* empty line to divide headers from body, see RFC 5322 */
+"The body of the message starts here.\r\n"
+"\r\n"
+"It could be a lot of lines, could be MIME encoded, whatever.\r\n"
+"Your password is $PASSWORD.\r\n";
+
+std::string payload_text_changed;
+
+struct upload_status {
+    size_t bytes_read;
+    std::string password;
+};
+
+static size_t payload_source(char* ptr, size_t size, size_t nmemb, void* userp)
+{
+    struct upload_status* upload_ctx = (struct upload_status*)userp;
+    const char* data;
+    size_t room = size * nmemb;
+
+    if ((size == 0) || (nmemb == 0) || ((size * nmemb) < 1)) {
+        return 0;
+    }
+
+    const char* txt = payload_text_changed.c_str();
+    data = &txt[upload_ctx->bytes_read];
+
+    if (data) {
+        size_t len = strlen(data);
+        if (room < len)
+            len = room;
+        memcpy(ptr, data, len);
+        upload_ctx->bytes_read += len;
+
+        return len;
+    }
+
+    return 0;
+}
+
+static int send_mail(const char* to_addr, const char* password)
+{
+    std::string string(payload_text);
+    payload_text_changed = std::regex_replace(string, std::regex("\\$PASSWORD"), password);
+
+    CURL* curl;
+    CURLcode res = CURLE_OK;
+    struct curl_slist* recipients = NULL;
+    struct upload_status upload_ctx = { 0 };
+
+    curl = curl_easy_init();
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, "smtps://smtp.163.com:465");
+        curl_easy_setopt(curl, CURLOPT_USERNAME, "shxm.ma@163.com");
+        curl_easy_setopt(curl, CURLOPT_PASSWORD, "xxxxxx");
+
+        curl_easy_setopt(curl, CURLOPT_MAIL_FROM, FROM_ADDR);
+
+        struct curl_slist* recipients = nullptr;
+        recipients = curl_slist_append(recipients, to_addr);
+        //recipients = curl_slist_append(recipients, CC_ADDR);
+        curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
+
+        curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_ALL);
+
+        curl_easy_setopt(curl, CURLOPT_READFUNCTION, payload_source);
+        curl_easy_setopt(curl, CURLOPT_READDATA, &upload_ctx);
+        curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+
+        res = curl_easy_perform(curl);
+
+        if (res != CURLE_OK) {
+            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+        }
+        else {
+            std::cout << "Email sent successfully!" << std::endl;
+        }
+
+        curl_slist_free_all(recipients);
+        curl_easy_cleanup(curl);
+    }
+    return 0;
+}
 
 /**
  * @brief Function to receive data from the client, decrypt it using AES-128,
@@ -149,7 +266,7 @@ void serverReceive(SOCKET client) {
                 // lookup password
                 ClientInfo info = db_query_user_password(uid - UID_BASE);
 
-                if (info.valid != -1 && info.password == password) {
+                if (info.valid == 1 && info.password == password) {
                     info.id += UID_BASE;
                     info.client = client;
                     userList.push_back(info);
@@ -208,6 +325,28 @@ void serverReceive(SOCKET client) {
         case MESSAGE_TYPE_EXIT:
             LOG(INFO) << "Client Disconnected.";
             break;
+        case MESSAGE_TYPE_FORGETPASSWORD:
+        {
+            // 4 bytes uid, bytes email
+            memcpy(&uid, buffer + 13, 4);
+            LOG(INFO) << "Client forgetpassword() uid: " << uid << endl;
+
+            char email[64] = { 0 };
+            memcpy(email, buffer + 13 + 4, payload_len - 4);
+            LOG(INFO) << "Client forgetpassword() email: " << email << endl;
+
+            ClientInfo info = db_query_user_password(uid - UID_BASE);
+            if (info.valid == 1 && stricmp(email, info.email.c_str()) == 0) {
+                send_mail(email, info.password.c_str());
+                serverSendForgetPasswordMessage(client, 0, "mail sent.");
+            }
+            else {
+                LOG(ERROR) << "invalid uid or password: is_valid: " << info.valid << ", " << info.password << endl;
+                serverSendForgetPasswordMessage(client, 1, "uid and email mismatch");
+            }
+
+        }
+            break;
         default:
             break;
         }
@@ -222,6 +361,29 @@ void serverReceive(SOCKET client) {
             memset(buffer, 0, sizeof(buffer));
             offset = 0;
         }
+    }
+}
+
+void serverSendForgetPasswordMessage(SOCKET client, unsigned char result, char *message)
+{
+    char buffer[1024] = { 0 };
+    buffer[0] = MESSAGE_TYPE_FORGETPASSWORDRESULT;
+    int invalid_id = -1;
+    memcpy(buffer + 1, &invalid_id, 4); // from
+    memcpy(buffer + 5, &invalid_id, 4); // to
+
+    int len = strlen(message);
+
+    int payload_len = len + 1;
+    memcpy(buffer + 9, &payload_len, 4);
+
+    // 1 byte: result, bytes: message
+
+    memcpy(buffer + 13, &result, 1);
+    memcpy(buffer + 13 + 1, message, len);
+
+    if (send(client, buffer, 13 + payload_len, 0) == SOCKET_ERROR) {
+        LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;
     }
 }
 
@@ -317,13 +479,14 @@ void serverSendLoginResultMessage(SOCKET client, int success, const char* msg) {
     buffer[0] = MESSAGE_TYPE_LOGINRESULT;
     memset(buffer + 1, 0, 4);
     memset(buffer + 5, 0, 4);
-    int payload_size = 4 + strlen(msg);
+    int payload_size = 4 + 16 + strlen(msg);
     memcpy(buffer + 9, &payload_size, 4);
     
     // payload
-    // 4 bytes result, message
+    // 4 bytes result, 16 bytes key, N bytes message
     memcpy(buffer + 13, &success, 4);
-    memcpy(buffer + 13 + 4, msg, strlen(msg));
+    memcpy(buffer + 13 + 4, g_key, 16);
+    memcpy(buffer + 13 + 4 + 16, msg, strlen(msg));
 
     if (send(client, buffer, 13 + payload_size, 0) == SOCKET_ERROR) {
         LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;
@@ -488,16 +651,18 @@ ClientInfo db_query_user_password(int uid)
     try {
         SQLite::Database db("chat.db3");
 
-        SQLite::Statement query(db, "SELECT name,password FROM user WHERE id = ?");
+        SQLite::Statement query(db, "SELECT name,password,email FROM user WHERE id = ?");
         query.bind(1, uid);
 
         if (query.executeStep()) {
             info.valid = 1;
             const char* name = query.getColumn(0);
             const char* password = query.getColumn(1);
+            const char* email = query.getColumn(2);
             info.id = uid;
             info.username = name;
             info.password = password;
+            info.email = email;
         }
     }
     catch (std::exception& e)
@@ -578,9 +743,10 @@ int db_create_tables()
         )");
         std::cout << "create table userevent: " << nb << std::endl;
 
+        nb = db.exec("DROP TABLE usermessage");
+
         nb = db.exec("CREATE TABLE IF NOT EXISTS usermessage( \
             id INTEGER PRIMARY KEY AUTOINCREMENT,\
-            uid INTEGER NOT NULL,\
             from INTEGER NOT NULL,\
             to INTEGER NOT NULL,\
             message TEXT NOT NULL,\
@@ -644,77 +810,108 @@ int db_create_tables()
     return 0;
 }
 
+int db_add_user_event(int uid, int event)
+{
+    SQLite::Database db("chat.db3", SQLite::OPEN_READWRITE);
+
+    SQLite::Statement query(db, "INSERT INTO userevent (uid, event, event_at) VALUES (?, ?, datetime('now', 'localtime'))");
+    query.bind(1, uid);
+    query.bind(2, event);
+    int nb = query.exec();
+
+    return 0;
+}
+
+int db_add_user_msg(int from, int to, const char* msg)
+{
+    SQLite::Database db("chat.db3", SQLite::OPEN_READWRITE);
+
+    SQLite::Statement query(db, "INSERT INTO usermsg (from, to, msg, created_at) VALUES (?, ?, ?, datetime('now', 'localtime'))");
+    query.bind(1, from);
+    query.bind(2, to);
+    query.bind(3, msg);
+    int nb = query.exec();
+
+    return 0;
+}
+
 /**
  * @brief Main function to create a server, accept client connections, and start
  * the chat application.
  * @return {int} Exit status of the application.
  */
-int main() {
+int main()
+{
     if (SetConsoleCtrlHandler((PHANDLER_ROUTINE)console_handler, TRUE) == FALSE) {
         printf("failed to set ctrl handler\n");
         return -1;
     }
 
-  if (db_create_tables() != 0) {
-      printf("failed to init db\n");
-      return -1;
-  }
+    generate_random_string(g_key);
+    char str_key[17] = { 0 };
+    memcpy(str_key, g_key, 16);
+    std::cout << "key: " << str_key << std::endl;
 
-  auto sink_cout = make_shared<AixLog::SinkCout>(AixLog::Severity::info);
-  auto sink_file = make_shared<AixLog::SinkFile>(AixLog::Severity::info, "server.log");
-  auto sink_func = make_shared<AixLog::SinkCallback>(AixLog::Severity::info,
-      [](const AixLog::Metadata& metadata, const std::string& message)
-      {
-          db_add_log((int)metadata.severity, message.c_str());
-      }
-  );
-  AixLog::Log::init({ sink_cout, sink_file, sink_func });
-  LOG(INFO) << "Hello, World!\n";
+    if (db_create_tables() != 0) {
+        printf("failed to init db\n");
+        return -1;
+    }
 
-  std::thread t1(http_server);
-  t1.detach();
+    auto sink_cout = make_shared<AixLog::SinkCout>(AixLog::Severity::info);
+    auto sink_file = make_shared<AixLog::SinkFile>(AixLog::Severity::info, "server.log");
+    auto sink_func = make_shared<AixLog::SinkCallback>(AixLog::Severity::info,
+        [](const AixLog::Metadata& metadata, const std::string& message)
+        {
+            db_add_log((int)metadata.severity, message.c_str());
+        }
+    );
+    AixLog::Log::init({ sink_cout, sink_file, sink_func });
+    LOG(INFO) << "Hello, World!\n";
 
-  WSADATA WSAData;
-  SOCKET server, client;
-  SOCKADDR_IN serverAddr, clientAddr;
-  if (WSAStartup(MAKEWORD(2, 0), &WSAData) != 0) {
-    cout << "Error WSAStartup: " << WSAGetLastError() << endl;
-    LOG(ERROR) << "Error WSAStartup" << WSAGetLastError();
-    return -1;
-  }
-  server = socket(AF_INET, SOCK_STREAM, 0);
-  if (server == INVALID_SOCKET) {
-    cout << "Error initialization socket: " << WSAGetLastError() << endl;
-    LOG(ERROR) << "Error initialization socket: " << WSAGetLastError();
-    return -1;
-  }
-  serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-  serverAddr.sin_family = AF_INET;
-  serverAddr.sin_port = htons(6666);
-  if (::bind(server, (SOCKADDR *)&serverAddr, sizeof(serverAddr)) ==
-      SOCKET_ERROR) {
-    cout << "Bind function failed with error: " << WSAGetLastError() << endl;
-    LOG(ERROR) << "Bind function failed with error: " << WSAGetLastError();
-    return -1;
-  }
-
-  if (::listen(server, 0) == SOCKET_ERROR) {
-    cout << "Listen function failed with error: " << WSAGetLastError() << endl;
-    LOG(ERROR) << "Listen function failed with error: " << WSAGetLastError();
-    return -1;
-  }
-  LOG(INFO) << "Listening for incoming connections...." << endl;
-
-  int clientAddrSize = sizeof(clientAddr);
-  while ((client = ::accept(server, (SOCKADDR *)&clientAddr, &clientAddrSize)) != INVALID_SOCKET) {
-    LOG(INFO) << "Client connected!" << endl;
-    LOG(INFO) << "Now you can use our live chat application. "
-         << "Enter \"exit\" to disconnect" << endl;
-    LOG(INFO) << "Client connected!\n";
-
-    thread t1(serverReceive, client);
+    std::thread t1(http_server);
     t1.detach();
-  }
 
-  WSACleanup();
+    WSADATA WSAData;
+    SOCKET server, client;
+    SOCKADDR_IN serverAddr, clientAddr;
+    if (WSAStartup(MAKEWORD(2, 0), &WSAData) != 0) {
+        cout << "Error WSAStartup: " << WSAGetLastError() << endl;
+        LOG(ERROR) << "Error WSAStartup" << WSAGetLastError();
+        return -1;
+    }
+    server = socket(AF_INET, SOCK_STREAM, 0);
+    if (server == INVALID_SOCKET) {
+        cout << "Error initialization socket: " << WSAGetLastError() << endl;
+        LOG(ERROR) << "Error initialization socket: " << WSAGetLastError();
+        return -1;
+    }
+    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(6666);
+    if (::bind(server, (SOCKADDR *)&serverAddr, sizeof(serverAddr)) ==
+        SOCKET_ERROR) {
+        cout << "Bind function failed with error: " << WSAGetLastError() << endl;
+        LOG(ERROR) << "Bind function failed with error: " << WSAGetLastError();
+        return -1;
+    }
+
+    if (::listen(server, 0) == SOCKET_ERROR) {
+        cout << "Listen function failed with error: " << WSAGetLastError() << endl;
+        LOG(ERROR) << "Listen function failed with error: " << WSAGetLastError();
+        return -1;
+    }
+    LOG(INFO) << "Listening for incoming connections...." << endl;
+
+    int clientAddrSize = sizeof(clientAddr);
+    while ((client = ::accept(server, (SOCKADDR *)&clientAddr, &clientAddrSize)) != INVALID_SOCKET) {
+        LOG(INFO) << "Client connected!" << endl;
+        LOG(INFO) << "Now you can use our live chat application. "
+                << "Enter \"exit\" to disconnect" << endl;
+        LOG(INFO) << "Client connected!\n";
+
+        thread t1(serverReceive, client);
+        t1.detach();
+    }
+
+    WSACleanup();
 }

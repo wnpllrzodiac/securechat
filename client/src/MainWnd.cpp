@@ -61,25 +61,6 @@ void WorkerThread::run() {
 
     char msg[4096] = { 0 };
 
-    buffer[0] = MESSAGE_TYPE_LOGIN;
-    int invalid_uid = -1;
-    memcpy(buffer + 1, &invalid_uid, 4);
-    memcpy(buffer + 5, &invalid_uid, 4);
-    // fix buffer[1] to buffer[4] with the length of the username
-
-    // 4 bytes uid, password
-    int payload_size = 4 + m_password.length();
-    memcpy(buffer + 9, &payload_size, 4);
-    memcpy(buffer + 13, &m_uid, 4);
-    memcpy(buffer + 13 + 4, m_password.c_str(), m_password.length());
-    int msg_len = 13 + payload_size;
-    cout << "to send msg type: " << MESSAGE_TYPE_LOGIN << ", msg_len: " << msg_len << endl;
-
-    if (::send(m_socket, buffer, msg_len, 0) == SOCKET_ERROR) {
-        cout << "send failed with error: " << WSAGetLastError() << endl;
-        return;
-    }
-
     while (true) {
         if (offset < 13) {
             int toread = MAX_BUFFER_SIZE - offset;
@@ -321,9 +302,14 @@ MainWnd::MainWnd(QWidget* parent)
 
     ui.pushButtonSend->setEnabled(false);
 
-    QObject::connect(ui.pushButtonConnect, &QPushButton::clicked, this, &MainWnd::connectToServer);
+    QObject::connect(ui.pushButtonConnect, &QPushButton::clicked, this, [this] {
+        connectToServer(true);
+    });
     QObject::connect(ui.pushButtonSend, &QPushButton::clicked, this, &MainWnd::sendMessage);
-    QObject::connect(ui.pushButtonSendMail, &QPushButton::clicked, this, &MainWnd::sendForgetPassword);
+    QObject::connect(ui.pushButtonSendMail, &QPushButton::clicked, this, [this] {
+        connectToServer(false);
+        sendForgetPassword();
+    });
     QObject::connect(ui.listWidgetClients, &QListWidget::itemClicked, this, [&](QListWidgetItem* item) {
         m_to_uid = item->data(Qt::UserRole).toInt();
         cout << "m_to_uid set to: " << m_to_uid << endl;
@@ -349,20 +335,42 @@ QString MainWnd::getNameFromUID(int uid)
     return "";
 }
 
+int MainWnd::doLogin()
+{
+    const int MAX_BUFFER_SIZE = 4096;
+    char buffer[MAX_BUFFER_SIZE] = { 0 };
+
+    buffer[0] = MESSAGE_TYPE_LOGIN;
+    int invalid_uid = -1;
+    memcpy(buffer + 1, &invalid_uid, 4);
+    memcpy(buffer + 5, &invalid_uid, 4);
+    // fix buffer[1] to buffer[4] with the length of the username
+
+    // 4 bytes uid, password
+    int payload_size = 4 + m_password.length();
+    memcpy(buffer + 9, &payload_size, 4);
+    memcpy(buffer + 13, &m_uid, 4);
+    memcpy(buffer + 13 + 4, m_password.toStdString().c_str(), m_password.length());
+    int msg_len = 13 + payload_size;
+    cout << "to send msg type: " << MESSAGE_TYPE_LOGIN << ", msg_len: " << msg_len << endl;
+
+    if (::send(m_server, buffer, msg_len, 0) == SOCKET_ERROR) {
+        cout << "send failed with error: " << WSAGetLastError() << endl;
+        return -1;
+    }
+
+    return 0;
+}
+
 void MainWnd::sendForgetPassword()
 {
-    /*connectToServer();
-    if (m_server == INVALID_SOCKET) {
-		QMessageBox::warning(nullptr, "error", "failed to connect to server");
-		return;
-	}*/
-
     QString strEmail = ui.lineEditEmail->text();
     if (strEmail.isEmpty()) {
         return;
     }
 
-    char buffer[4096] = { 0 };
+    const int MAX_BUFFER_SIZE = 4096;
+    char buffer[MAX_BUFFER_SIZE] = { 0 };
 
     memset(buffer, 0, 4096);
 
@@ -504,7 +512,7 @@ void MainWnd::onClearUsers()
     ui.listWidgetClients->clear();
 }
 
-int MainWnd::connectToServer()
+int MainWnd::connectToServer(bool autologin)
 {
     m_uid = ui.lineEditUID->text().toInt();
     m_password = ui.lineEditPassword->text();
@@ -533,7 +541,10 @@ int MainWnd::connectToServer()
 
     cout << "Connected to server!" << endl;
 
-    m_workerThread = new WorkerThread(m_server, m_uid, m_password.toStdString().c_str());
+    if (autologin && doLogin() == -1)
+        return -1;
+
+    m_workerThread = new WorkerThread(m_server);
 
     connect(m_workerThread, &WorkerThread::userList, this, &MainWnd::onUserList);
     connect(m_workerThread, &WorkerThread::setUserName, this, &MainWnd::onSetUserName);

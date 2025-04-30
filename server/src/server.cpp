@@ -881,14 +881,55 @@ int db_add_user_event(int uid, int event)
     return 0;
 }
 
+std::string Unicode2Utf8(const std::wstring& widestring) {
+    using namespace std;
+    int utf8size = ::WideCharToMultiByte(CP_UTF8, 0, widestring.c_str(), -1, NULL, 0, NULL, NULL);
+    if (utf8size == 0)
+    {
+        throw std::exception("Error in conversion.");
+    }
+    std::vector<char> resultstring(utf8size);
+    int convresult = ::WideCharToMultiByte(CP_UTF8, 0, widestring.c_str(), -1, &resultstring[0], utf8size, NULL, NULL);
+    if (convresult != utf8size)
+    {
+        throw std::exception("La falla!");
+    }
+    return std::string(&resultstring[0]);
+}
+
+std::wstring Acsi2WideByte(std::string& strascii) {
+    using namespace std;
+    int widesize = MultiByteToWideChar(CP_ACP, 0, (char*)strascii.c_str(), -1, NULL, 0);
+    if (widesize == ERROR_NO_UNICODE_TRANSLATION)
+    {
+        throw std::exception("Invalid UTF-8 sequence.");
+    }
+    if (widesize == 0)
+    {
+        throw std::exception("Error in conversion.");
+    }
+    std::vector<wchar_t> resultstring(widesize);
+    int convresult = MultiByteToWideChar(CP_ACP, 0, (char*)strascii.c_str(), -1, &resultstring[0], widesize);
+    if (convresult != widesize)
+    {
+        throw std::exception("La falla!");
+    }
+    return std::wstring(&resultstring[0]);
+}
+
 int db_add_user_msg(int from, int to, const char* msg)
 {
+    std::string strAsciiCode = msg;
+    wstring wstr = Acsi2WideByte(strAsciiCode);
+    //最后把 unicode 转为 utf8 
+    std::string finalStr = Unicode2Utf8(wstr);
+
     SQLite::Database db("chat.db3", SQLite::OPEN_READWRITE);
 
     SQLite::Statement query(db, "INSERT INTO usermessage (from_user, to_user, message, added_at) VALUES (?, ?, ?, datetime('now', 'localtime'))");
     query.bind(1, from);
     query.bind(2, to);
-    query.bind(3, msg);
+    query.bind(3, finalStr.c_str());
     int nb = query.exec();
 
     return 0;

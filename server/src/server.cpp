@@ -351,10 +351,10 @@ void serverReceive(SOCKET client) {
             if (is_enc) {
                 memcpy(decrypted_msg, encrypted_msg, payload_len - 1);
                 decrypt_AES(decrypted_msg, payload_len - 1);
-                db_add_user_msg(user_from, user_to, decrypted_msg);
+                //db_add_user_msg(user_from, user_to, decrypted_msg);
             }
             else {
-                db_add_user_msg(user_from, user_to, encrypted_msg);
+                //db_add_user_msg(user_from, user_to, encrypted_msg);
             }
 
             if (msg_to == -1) {
@@ -885,7 +885,7 @@ int db_add_user_msg(int from, int to, const char* msg)
 {
     SQLite::Database db("chat.db3", SQLite::OPEN_READWRITE);
 
-    SQLite::Statement query(db, "INSERT INTO usermsg (from_user, to_user, msg, created_at) VALUES (?, ?, ?, datetime('now', 'localtime'))");
+    SQLite::Statement query(db, "INSERT INTO usermessage (from_user, to_user, msg, created_at) VALUES (?, ?, ?, datetime('now', 'localtime'))");
     query.bind(1, from);
     query.bind(2, to);
     query.bind(3, msg);

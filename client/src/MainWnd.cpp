@@ -146,11 +146,17 @@ void WorkerThread::run() {
             {
                 // 1 byte is_enc, bytes message
                 unsigned char is_enc = 0;
+                unsigned char decrypted_text[512] = { 0 };
+                char* plain_text = buffer + 13 + 1;
                 memcpy(&is_enc, buffer + 13, 1);
-                if (is_enc)
-                    decrypt_AES(buffer + 13 + 1, offset - 13 - 1);
+                if (is_enc) {
+                    int outlen = 0;
+                    decrypt_AES((unsigned char*)buffer + 13 + 1, offset - 13 - 1, decrypted_text, &outlen);
+                    decrypted_text[outlen] = 0x0;
+                    plain_text = (char *)decrypted_text;
+                }
                 cout << "#" << msg_from << " sent msg to " << msg_to << " :" << buffer + 13 + 1 << endl;
-                std::string msg = buffer + 13 + 1;
+                std::string msg = plain_text;
                 emit appendMessageLog(msg_from, msg_to, msg);
              }
             
@@ -411,26 +417,28 @@ void MainWnd::sendMessage()
     printf("input msg: %s\n", output);
 
     strcpy(msg, byteArray.constData());
-    char encryped_msg[256] = { 0 };
-    memcpy(encryped_msg, msg, 256);
-    if (is_enc)
-        encrypt_AES(encryped_msg, strlen(msg));
 
     char buffer[4096] = { 0 };
 
-    memset(buffer, 0, 4096);
+    int outlen = 0;
+    if (is_enc) {
+        encrypt_AES((unsigned char *)msg, strlen(msg), (unsigned char*)buffer + 13 + 1, &outlen);
+    }
+    else {
+        cout << "not suppport no enc mode" << endl;
+        return;
+    }
 
     buffer[0] = MESSAGE_TYPE_MESSAGE;
     // fix buffer[1] to buffer[4] with the length of the username
-    int size = 1 + strlen(encryped_msg);
+    int size = 1 + outlen;
     memcpy(buffer + 1, &m_uid, 4); // from user id
     memcpy(buffer + 5, &m_to_uid, 4); // to user id
     memcpy(buffer + 9, &size, 4);
 
     // 1 byte is_enc, bytes message
     memcpy(buffer + 13, &is_enc, 1);
-    memcpy(buffer + 13 + 1, encryped_msg, strlen(encryped_msg));
-    int msg_len = 13 + 1 + strlen(encryped_msg);
+    int msg_len = 13 + 1 + outlen;
     cout << "to send msg type: " << MESSAGE_TYPE_MESSAGE << ", msg_len: " << msg_len << ", plain msg: " << msg << endl;
 
     if (::send(m_server, buffer, msg_len, 0) == SOCKET_ERROR) {

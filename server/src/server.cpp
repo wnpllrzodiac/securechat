@@ -349,8 +349,9 @@ void serverReceive(SOCKET client) {
 
             char decrypted_msg[MAX_BUFFER_SIZE] = { 0 };
             if (is_enc) {
-                memcpy(decrypted_msg, encrypted_msg, payload_len - 1);
-                decrypt_AES(decrypted_msg, payload_len - 1);
+                int outlen = 0;
+                decrypt_AES((unsigned char*)encrypted_msg, payload_len - 1, (unsigned char*)decrypted_msg, &outlen);
+                decrypted_msg[outlen] = 0x0;
                 db_add_user_msg(user_from, user_to, decrypted_msg);
             }
             else {

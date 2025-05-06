@@ -42,3 +42,8 @@ https://github.com/yhirose/cpp-httplib
 
 `QString::toLocal8Bit()`
 `QString::fromLocal8Bit()`
+
+# curl send mail
+`curl --url "smtps://smtp.163.com:465" --ssl-reqd --mail-from "19150952127@163.com" --mail-rcpt "wnpllr@163.com"  --upload-file mail.txt --user "19150952127@163.com:authorize_key_if_set"`
+
+`curl --url "smtps://smtp.163.com:465" --ssl-reqd --mail-from "shxm.ma@163.com" --mail-rcpt "wnpllr@163.com"  --upload-file mail.txt --user "shxm.ma@163.com:password"`

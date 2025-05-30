@@ -11,7 +11,7 @@ find_package(rapidjson REQUIRED)
 include_directories(${OPENSSL_INCLUDE_DIR})
 
 
-add_executable(server src/server.cpp src/httplib.h src/cipher.c)
+add_executable(server src/server.cpp src/httplib.h src/cipher.c src/rsaUtil.cpp)
 
 
 target_link_libraries(server PRIVATE wsock32 ws2_32)

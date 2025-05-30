@@ -254,9 +254,10 @@ void MainWnd::onUserList(std::vector<UserInfo> list)
 void clientSend(MainWnd * ins) {
     SOCKET server = ins->getServerSocket();
 
-    char buffer[4096] = { 0 };
+    char buffer[8192] = { 0 };
     char password[64] = { 0 };
-    char msg[4096] = { 0 };
+	char pub_key[1024] = { 0 }; // client public key
+    char msg[8192] = { 0 };
 
     strcpy(password, ins->getPassword().toStdString().c_str());
 
@@ -266,13 +267,17 @@ void clientSend(MainWnd * ins) {
     int invalid_uid = -1;
     memcpy(buffer + 1, &invalid_uid, 4);
     memcpy(buffer + 5, &invalid_uid, 4);
-    // fix buffer[1] to buffer[4] with the length of the username
 
-    // 4 bytes uid, password
-    int payload_size = 4 + strlen(password);
+    // 4 bytes uid, 4 bytes pw len, password, 4 bytes client_pub_key len, client_pub_key
+    int payload_size = 4 + 4 + strlen(password) + 4 + strlen(pub_key);
+	int password_len = strlen(password);
+	int pub_key_len = strlen(pub_key);
     memcpy(buffer + 9, &payload_size, 4);
     memcpy(buffer + 13, &uid, 4);
-    memcpy(buffer + 13 + 4, password, strlen(password));
+	memcpy(buffer + 13 + 4, &password_len, 4);
+    memcpy(buffer + 13 + 4 + 4, password, password_len);
+    memcpy(buffer + 13 + 4 + 4 + password_len, &pub_key_len, 4);
+    memcpy(buffer + 13 + 4 + 4, pub_key, pub_key_len);
     int msg_len = 13 + payload_size;
     cout << "to send msg type: " << MESSAGE_TYPE_LOGIN << ", msg_len: " << msg_len << endl;
 

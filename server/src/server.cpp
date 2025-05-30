@@ -1,6 +1,7 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include "httplib.h"
 #include "../include/cipher.h"
+#include "../include/rsaUtil.h"
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -111,9 +112,9 @@ void generate_random_string(char* str, size_t length = 16) {
 }
 
 #define SMTP_MAIL_ADDR          "smtps://smtp.163.com:465"
-#define SMTP_MAIL_USERNAME      "shxm.ma@163.com"
+#define SMTP_MAIL_USERNAME      "19150952127@163.com"
 
-#define FROM_ADDR    "<shxm.ma@163.com>"
+#define FROM_ADDR    "<19150952127@163.com>"
 #define TO_ADDR      "<wnpllr@gmail.com>"
 #define CC_ADDR      "<info@example.org>"
 
@@ -285,14 +286,24 @@ void serverReceive(SOCKET client) {
         unsigned char is_enc = 0;
         switch (msg_type) {
         case MESSAGE_TYPE_LOGIN:
-            // 4 bytes uid, password
+            // 4 bytes uid, 4 bytes pw len, password, 4 bytes client_pub_key len, client_pub_key
         {
             memcpy(&uid, buffer + 13, 4);
             LOG(INFO) << "Client login() uid: " << uid << endl;
 
+			int passoword_len = 0;
+			memcpy(&passoword_len, buffer + 13 + 4, 4);
+
             char password[64] = { 0 };
-            memcpy(password, buffer + 13 + 4, payload_len - 4);
+            memcpy(password, buffer + 13 + 8, passoword_len);
             LOG(INFO) << "Client login() password: " << password << endl;
+
+            int pub_key_len = 0;
+            memcpy(&pub_key_len, buffer + 13 + 8 + passoword_len, 4);
+
+            char pub_key[1024] = { 0 };
+            memcpy(password, buffer + 13 + 8 + passoword_len + 4, pub_key_len);
+            LOG(INFO) << "Client login() pub_key: " << pub_key << endl;
 
             int already_login = 0;
             for (auto info : userList) {

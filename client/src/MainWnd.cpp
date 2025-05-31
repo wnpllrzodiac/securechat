@@ -100,19 +100,25 @@ void WorkerThread::run() {
             cout << "Login result message received" << endl;
 
             {
-                // 4 bytes result, 16 bytes key, N bytes message
+                // 4 bytes result, 4 bytes encrypted_key len, N bytes encrypted_key, N bytes message
                 int result;
+                int encrypted_key_len;
                 char message[256] = { 0 };
+				char encrypted_key[1024] = { 0 };
                 memcpy(&result, buffer + 13, 4);
-                memcpy(g_key, buffer + 13 + 4, 16);
-                memcpy(message, buffer + 13 + 4 + 16, payload_len - 4 - 16);
+                memcpy(&encrypted_key_len, buffer + 13 + 4, 4);
+				cout << "encrypted_key_len: " << encrypted_key_len << endl;
+                memcpy(encrypted_key, buffer + 13 + 4 + 4, encrypted_key_len);
+                memcpy(message, buffer + 13 + 4 + 4 + encrypted_key_len, payload_len - 4 - 4 - encrypted_key_len);
 
                 if (result == 0) {
                     std::cout << "login result: succesful" << std::endl;
 
-                    char str_key[17] = { 0 };
-                    memcpy(str_key, g_key, 16);
-                    std::cout << "key: " << str_key << std::endl;
+					std::vector<unsigned char> encrypted_key_vec(encrypted_key, encrypted_key + encrypted_key_len);
+					std::string msg_key = rsa_decrypt(encrypted_key_vec, m_rsa);
+                    std::cout << "key: " << msg_key << std::endl;
+					memcpy(g_key, msg_key.c_str(), 16);
+
                     emit setUserName(message);
 
                     sendGetList();
@@ -330,7 +336,7 @@ int MainWnd::doLogin()
     memcpy(buffer + 13 + 4, &password_len, 4);
     memcpy(buffer + 13 + 4 + 4, m_password.toStdString().c_str(), password_len);
     memcpy(buffer + 13 + 4 + 4 + password_len, &pub_key_len, 4);
-    memcpy(buffer + 13 + 4 + 4, m_pub_key.c_str(), pub_key_len);
+    memcpy(buffer + 13 + 4 + 4 + password_len + 4, m_pub_key.c_str(), pub_key_len);
     int msg_len = 13 + payload_size;
     cout << "to send msg type: " << MESSAGE_TYPE_LOGIN << ", msg_len: " << msg_len << endl;
 
@@ -526,7 +532,7 @@ int MainWnd::connectToServer(bool autologin)
     if (autologin && doLogin() == -1)
         return -1;
 
-    m_workerThread = new WorkerThread(m_server);
+    m_workerThread = new WorkerThread(m_server, m_rsa);
 
     connect(m_workerThread, &WorkerThread::userList, this, &MainWnd::onUserList);
     connect(m_workerThread, &WorkerThread::setUserName, this, &MainWnd::onSetUserName);

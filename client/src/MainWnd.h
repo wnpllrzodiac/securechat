@@ -21,8 +21,8 @@ struct UserInfo {
 class WorkerThread: public QThread {
     Q_OBJECT
 public:
-    WorkerThread(const SOCKET socket, QObject* parent = nullptr)
-        : QThread(parent), m_socket(socket) {
+    WorkerThread(const SOCKET socket, MyRSA *rsa, QObject* parent = nullptr)
+        : QThread(parent), m_socket(socket), m_rsa(rsa) {
     }
 
     void run() override;
@@ -41,6 +41,7 @@ signals:
    
 private:
     SOCKET      m_socket;
+    MyRSA*      m_rsa;
 };
 
 class MainWnd : public QMainWindow {

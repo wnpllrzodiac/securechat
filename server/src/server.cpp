@@ -70,7 +70,7 @@ n bytes: message
 void serverSendUserList(SOCKET client);
 void serverSendJoinedMessage(int uid, const char* username);
 void serverSendLeavedMessage(int uid);
-void serverSendLoginResultMessage(SOCKET client, int success, const char* msg);
+void serverSendLoginResultMessage(SOCKET client, int success, const char* msg, const char* pubkey);
 void serverForwardMessage(SOCKET socket, int from, int to, char* data, int data_len);
 void serverSendForgetPasswordMessage(SOCKET client, unsigned char result, char* message);
 
@@ -227,6 +227,7 @@ void serverReceive(SOCKET client) {
     const int MAX_BUFFER_SIZE = 4096;
     char buffer[MAX_BUFFER_SIZE] = {0};
     char encrypted_msg[MAX_BUFFER_SIZE] = { 0 };
+    char pub_key[1024] = { 0 };
     int offset = 0;
     int readed = -1;
     int curr_payload_len = -1;
@@ -295,14 +296,13 @@ void serverReceive(SOCKET client) {
 			memcpy(&passoword_len, buffer + 13 + 4, 4);
 
             char password[64] = { 0 };
-            memcpy(password, buffer + 13 + 8, passoword_len);
+            memcpy(password, buffer + 13 + 4 + 4, passoword_len);
             LOG(INFO) << "Client login() password: " << password << endl;
 
             int pub_key_len = 0;
-            memcpy(&pub_key_len, buffer + 13 + 8 + passoword_len, 4);
+            memcpy(&pub_key_len, buffer + 13 + 4 + 4 + passoword_len, 4);
 
-            char pub_key[1024] = { 0 };
-            memcpy(password, buffer + 13 + 8 + passoword_len + 4, pub_key_len);
+            memcpy(pub_key, buffer + 13 + 4 + 4 + passoword_len + 4, pub_key_len);
             LOG(INFO) << "Client login() pub_key: " << pub_key << endl;
 
             int already_login = 0;
@@ -327,18 +327,18 @@ void serverReceive(SOCKET client) {
                     userList.push_back(info);
                     LOG(INFO) << "Client #" << uid << " added to list\n";
 
-                    serverSendLoginResultMessage(client, 0, info.username.c_str());
+                    serverSendLoginResultMessage(client, 0, info.username.c_str(), pub_key);
 
                     serverSendJoinedMessage(uid, info.username.c_str());
                 }
                 else {
                     db_add_user_event(uid - UID_BASE, USEREVENT_LOGIN_WRONG_PASSWORD);
-                    serverSendLoginResultMessage(client, -1, "invalid uid or password");
+                    serverSendLoginResultMessage(client, -1, "invalid uid or password", pub_key);
                 }
             }
             else{
                 db_add_user_event(uid - UID_BASE, USEREVENT_LOGIN_ALREADY_LOGIN);
-                serverSendLoginResultMessage(client, -1, "this uid already logined");
+                serverSendLoginResultMessage(client, -1, "this uid already logined", pub_key);
             }
         }
            
@@ -547,19 +547,30 @@ void serverSendUserList(SOCKET client)
  * send it to the client.
  * @param {SOCKET} client The client socket to send data to.
  */
-void serverSendLoginResultMessage(SOCKET client, int success, const char* msg) {
+void serverSendLoginResultMessage(SOCKET client, int success, const char* msg, const char* pubkey) {
     char buffer[1024] = {0};
+
+    MyRSA* rsa = create_rsa_from_pub_key_string(std::string(pubkey));
+    std::vector<unsigned char> encrypted_key_vec = rsa_encrypt(std::string(g_key), rsa);
+    int enc_key_len = encrypted_key_vec.size();
+    char encrypted_key[1024] = { 0 };
+    int i = 0;
+    for (auto item : encrypted_key_vec) {
+        encrypted_key[i++] = item;
+    }
+
     buffer[0] = MESSAGE_TYPE_LOGINRESULT;
     memset(buffer + 1, 0, 4);
     memset(buffer + 5, 0, 4);
-    int payload_size = 4 + 16 + strlen(msg);
+    int payload_size = 4 + 4 + enc_key_len + strlen(msg);
     memcpy(buffer + 9, &payload_size, 4);
-    
+
     // payload
-    // 4 bytes result, 16 bytes key, N bytes message
+    // 4 bytes result, 4 bytes encrypted_key len, N bytes encrypted_key, N bytes message
     memcpy(buffer + 13, &success, 4);
-    memcpy(buffer + 13 + 4, g_key, 16);
-    memcpy(buffer + 13 + 4 + 16, msg, strlen(msg));
+    memcpy(buffer + 13 + 4, &enc_key_len, 4);
+	memcpy(buffer + 13 + 4 + 4, encrypted_key, enc_key_len);
+    memcpy(buffer + 13 + 4 + 4 + enc_key_len, msg, strlen(msg));
 
     if (send(client, buffer, 13 + payload_size, 0) == SOCKET_ERROR) {
         LOG(ERROR) << "send failed with error: " << WSAGetLastError() << endl;

@@ -7,6 +7,7 @@
 #include <winsock2.h>
 
 class QTextEdit;
+struct MyRSA;
 
 namespace Ui {
     class MainWnd;
@@ -81,5 +82,8 @@ private:
     int             m_to_uid = -1;
 
     WorkerThread*   m_workerThread;
+
+    MyRSA*          m_rsa;
+    std::string     m_pub_key;
 };
 #endif  // MAIN_WINDOW_H

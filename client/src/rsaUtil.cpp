@@ -7,6 +7,11 @@
 #include <openssl/err.h>
 #include <stdexcept>
 
+struct MyRSA {
+    MyRSA(RSA* rsa) : rsa_(rsa) { }
+    RSA* rsa_;
+};
+
 // 错误处理函数
 void handle_errors() {
     ERR_print_errors_fp(stderr);
@@ -14,7 +19,7 @@ void handle_errors() {
 }
 
 // 生成 RSA 密钥对
-RSA* generate_rsa_key(int key_size) {
+MyRSA* generate_rsa_key(int key_size) {
     RSA* rsa = RSA_new();
     if (!rsa) handle_errors();
 
@@ -37,15 +42,15 @@ RSA* generate_rsa_key(int key_size) {
     }
 
     BN_free(bne);
-    return rsa;
+    return new MyRSA(rsa);
 }
 
 // 提取公钥
-std::string extract_public_key(RSA* rsa_key) {
+std::string extract_public_key(MyRSA* rsa_key) {
     BIO* bio = BIO_new(BIO_s_mem());
     if (!bio) handle_errors();
 
-    if (!PEM_write_bio_RSAPublicKey(bio, rsa_key)) {
+    if (!PEM_write_bio_RSAPublicKey(bio, rsa_key->rsa_)) {
         BIO_free_all(bio);
         handle_errors();
     }
@@ -60,11 +65,11 @@ std::string extract_public_key(RSA* rsa_key) {
 }
 
 // 提取私钥
-std::string extract_private_key(RSA* rsa_key) {
+std::string extract_private_key(MyRSA* rsa_key) {
     BIO* bio = BIO_new(BIO_s_mem());
     if (!bio) handle_errors();
 
-    if (!PEM_write_bio_RSAPrivateKey(bio, rsa_key, NULL, NULL, 0, NULL, NULL)) {
+    if (!PEM_write_bio_RSAPrivateKey(bio, rsa_key->rsa_, NULL, NULL, 0, NULL, NULL)) {
         BIO_free_all(bio);
         handle_errors();
     }
@@ -79,7 +84,7 @@ std::string extract_private_key(RSA* rsa_key) {
 }
 
 // 从公钥字符串创建 RSA 结构体
-RSA* create_rsa_from_pub_key_string(const std::string& pub_key_string) {
+MyRSA* create_rsa_from_pub_key_string(const std::string& pub_key_string) {
     RSA* rsa = nullptr;
     BIO* keybio = BIO_new_mem_buf((void*)pub_key_string.c_str(), pub_key_string.size()); // -1: string is null-terminated
 
@@ -99,11 +104,11 @@ RSA* create_rsa_from_pub_key_string(const std::string& pub_key_string) {
     }
 
     BIO_free(keybio); // Always free BIO
-    return rsa;
+    return new MyRSA(rsa);
 }
 
 // 从私钥字符串创建 RSA 结构体
-RSA* createRSA(const std::string& privateKeyString) {
+MyRSA* createRSA(const std::string& privateKeyString) {
     RSA* rsa = nullptr;
     BIO* keybio = BIO_new_mem_buf((void*)privateKeyString.c_str(), -1);  // 创建 BIO 对象
     if (!keybio) {
@@ -120,19 +125,19 @@ RSA* createRSA(const std::string& privateKeyString) {
     }
 
     BIO_free_all(keybio);  // 释放 BIO 资源
-    return rsa;
+    return new MyRSA(rsa);
 }
 
 // RSA 加密
-std::vector<unsigned char> rsa_encrypt(const std::string& plaintext, RSA* public_key) {
-    int key_size = RSA_size(public_key);
+std::vector<unsigned char> rsa_encrypt(const std::string& plaintext, MyRSA* public_key) {
+    int key_size = RSA_size(public_key->rsa_);
     std::vector<unsigned char> ciphertext(key_size);
 
     int result = RSA_public_encrypt(
         plaintext.size(),
         reinterpret_cast<const unsigned char*>(plaintext.data()),
         ciphertext.data(),
-        public_key,
+        public_key->rsa_,
         RSA_PKCS1_PADDING // 使用 PKCS#1 v1.5 padding
     );
 
@@ -145,15 +150,15 @@ std::vector<unsigned char> rsa_encrypt(const std::string& plaintext, RSA* public
 }
 
 // RSA 解密
-std::string rsa_decrypt(const std::vector<unsigned char>& ciphertext, RSA* private_key) {
-    int key_size = RSA_size(private_key);
+std::string rsa_decrypt(const std::vector<unsigned char>& ciphertext, MyRSA* private_key) {
+    int key_size = RSA_size(private_key->rsa_);
     std::vector<unsigned char> plaintext(key_size);
 
     int result = RSA_private_decrypt(
         ciphertext.size(),
         ciphertext.data(),
         plaintext.data(),
-        private_key,
+        private_key->rsa_,
         RSA_PKCS1_PADDING // 使用 PKCS#1 v1.5 padding
     );
 
@@ -173,7 +178,7 @@ int test_main()
 
     try {
         // 1. 生成 RSA 密钥对 (2048 位)
-        RSA* rsa_key = generate_rsa_key(2048);
+        MyRSA* rsa_key = generate_rsa_key(2048);
         
         std::string public_key = extract_public_key(rsa_key);
 		std::string private_key = extract_private_key(rsa_key);
@@ -184,7 +189,7 @@ int test_main()
         std::string plaintext = "This is a secret message!";
 
         // 3. 加密
-		RSA * rsa_key_pub = create_rsa_from_pub_key_string(public_key); // 创建 RSA 结构体从公钥字符串
+        MyRSA* rsa_key_pub = create_rsa_from_pub_key_string(public_key); // 创建 RSA 结构体从公钥字符串
         std::vector<unsigned char> ciphertext = rsa_encrypt(plaintext, rsa_key_pub);
 
         // 4. 解密
@@ -200,7 +205,7 @@ int test_main()
         std::cout << "Decrypted text: " << decrypted_text << std::endl;
 
         // 6. 释放密钥
-        RSA_free(rsa_key);
+        RSA_free(rsa_key->rsa_);
         EVP_cleanup();
         CRYPTO_cleanup_all_ex_data();
         ERR_free_strings();

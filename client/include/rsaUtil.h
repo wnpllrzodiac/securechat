@@ -3,11 +3,12 @@
 
 #include <string>
 #include <vector>
-#include <openssl/rsa.h>
 
-RSA* generate_rsa_key(int key_size);
-std::string extract_public_key(RSA* rsa_key);
-std::vector<unsigned char> rsa_encrypt(const std::string& plaintext, RSA* public_key);
-std::string rsa_decrypt(const std::vector<unsigned char>& ciphertext, RSA* private_key);
+struct MyRSA;
+
+MyRSA* generate_rsa_key(int key_size);
+std::string extract_public_key(MyRSA* rsa_key);
+std::vector<unsigned char> rsa_encrypt(const std::string& plaintext, MyRSA* public_key);
+std::string rsa_decrypt(const std::vector<unsigned char>& ciphertext, MyRSA* private_key);
 
 #endif

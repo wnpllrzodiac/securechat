@@ -1,6 +1,7 @@
 #include "MainWnd.h"
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include "../include/cipher.h"
+#include "../include/rsaUtil.h"
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -247,46 +248,6 @@ void MainWnd::onUserList(std::vector<UserInfo> list)
     }
 }
 
-/**
- * @brief Function to send data to the server after encrypting it using AES-128.
- * @param {SOCKET} server The server socket to send data to.
- */
-void clientSend(MainWnd * ins) {
-    SOCKET server = ins->getServerSocket();
-
-    char buffer[8192] = { 0 };
-    char password[64] = { 0 };
-	char pub_key[1024] = { 0 }; // client public key
-    char msg[8192] = { 0 };
-
-    strcpy(password, ins->getPassword().toStdString().c_str());
-
-    int uid = ins->getUid();
-
-    buffer[0] = MESSAGE_TYPE_LOGIN;
-    int invalid_uid = -1;
-    memcpy(buffer + 1, &invalid_uid, 4);
-    memcpy(buffer + 5, &invalid_uid, 4);
-
-    // 4 bytes uid, 4 bytes pw len, password, 4 bytes client_pub_key len, client_pub_key
-    int payload_size = 4 + 4 + strlen(password) + 4 + strlen(pub_key);
-	int password_len = strlen(password);
-	int pub_key_len = strlen(pub_key);
-    memcpy(buffer + 9, &payload_size, 4);
-    memcpy(buffer + 13, &uid, 4);
-	memcpy(buffer + 13 + 4, &password_len, 4);
-    memcpy(buffer + 13 + 4 + 4, password, password_len);
-    memcpy(buffer + 13 + 4 + 4 + password_len, &pub_key_len, 4);
-    memcpy(buffer + 13 + 4 + 4, pub_key, pub_key_len);
-    int msg_len = 13 + payload_size;
-    cout << "to send msg type: " << MESSAGE_TYPE_LOGIN << ", msg_len: " << msg_len << endl;
-
-    if (::send(server, buffer, msg_len, 0) == SOCKET_ERROR) {
-        cout << "send failed with error: " << WSAGetLastError() << endl;
-        return;
-    }
-}
-
 MainWnd::MainWnd(QWidget* parent)
 	: QMainWindow(parent)
 {
@@ -325,6 +286,9 @@ MainWnd::MainWnd(QWidget* parent)
         m_to_uid = item->data(Qt::UserRole).toInt();
         cout << "m_to_uid set to: " << m_to_uid << endl;
     });
+
+    m_rsa = generate_rsa_key(2048);
+    m_pub_key = extract_public_key(m_rsa);
 }
 
 MainWnd::~MainWnd()
@@ -357,11 +321,16 @@ int MainWnd::doLogin()
     memcpy(buffer + 5, &invalid_uid, 4);
     // fix buffer[1] to buffer[4] with the length of the username
 
-    // 4 bytes uid, password
-    int payload_size = 4 + m_password.length();
+    // 4 bytes uid, 4 bytes pw len, password, 4 bytes client_pub_key len, client_pub_key
+    int password_len = m_password.length();
+    int pub_key_len = m_pub_key.length();
+    int payload_size = 4 + 4 + password_len + 4 + pub_key_len;
     memcpy(buffer + 9, &payload_size, 4);
     memcpy(buffer + 13, &m_uid, 4);
-    memcpy(buffer + 13 + 4, m_password.toStdString().c_str(), m_password.length());
+    memcpy(buffer + 13 + 4, &password_len, 4);
+    memcpy(buffer + 13 + 4 + 4, m_password.toStdString().c_str(), password_len);
+    memcpy(buffer + 13 + 4 + 4 + password_len, &pub_key_len, 4);
+    memcpy(buffer + 13 + 4 + 4, m_pub_key.c_str(), pub_key_len);
     int msg_len = 13 + payload_size;
     cout << "to send msg type: " << MESSAGE_TYPE_LOGIN << ", msg_len: " << msg_len << endl;
 
